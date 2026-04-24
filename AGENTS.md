@@ -54,3 +54,5 @@
 - 当前项目已开始整理为 Git 仓库，发布时保持静态页结构，不额外引入构建链路
 - `pic/` 下素材属于运行主资源，默认纳入版本管理
 - `.codex-logs/` 属于本地运行日志，默认加入忽略，不上传 GitHub
+- 当前远程仓库地址为 `https://github.com/cnYui/chunchao.git`
+- 当前默认分支为 `main`，本地已与 `origin/main` 建立跟踪关系
