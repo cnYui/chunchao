@@ -30,6 +30,7 @@
 - 远程仓库已绑定为 `https://github.com/cnYui/chunchao.git`
 - 本地分支 `main` 已推送并跟踪 `origin/main`
 - 首次推送包含静态场景代码、素材资源和现有上下文文档
+- 仓库首页补充 `README.md`，定位为对外快速说明，不重复堆叠内部设计细节
 
 ## 建议后的衔接方式
 

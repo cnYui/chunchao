@@ -56,3 +56,4 @@
 - `.codex-logs/` 属于本地运行日志，默认加入忽略，不上传 GitHub
 - 当前远程仓库地址为 `https://github.com/cnYui/chunchao.git`
 - 当前默认分支为 `main`，本地已与 `origin/main` 建立跟踪关系
+- `README.md` 只保留对外快速说明、运行方式和当前约束，设计推导继续沉淀到 `docs/ai/context/`
