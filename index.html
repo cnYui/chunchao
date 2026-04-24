@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+    <title>春潮乐器场景</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="page-shell">
+      <section
+        class="scene"
+        id="scene"
+        aria-label="可交互的排练室乐器场景"
+      >
+        <div class="scene-overlay" aria-hidden="true"></div>
+
+        <figure
+          class="instrument instrument-violin"
+          data-id="violin"
+          data-name="提琴"
+          data-x="62.5"
+          data-y="50.3"
+          data-size="20"
+          data-influence="1.05"
+          data-force="1.1"
+        >
+          <img src="./pic/violin_transparent.png" alt="提琴" draggable="false" />
+        </figure>
+
+        <figure
+          class="instrument instrument-harp"
+          data-id="harp"
+          data-name="竖琴"
+          data-x="82.3"
+          data-y="53.3"
+          data-size="16.9"
+          data-influence="0.95"
+          data-force="0.92"
+        >
+          <img src="./pic/shuqin_transparent.png" alt="竖琴" draggable="false" />
+        </figure>
+
+        <figure
+          class="instrument instrument-keyboard"
+          data-id="keyboard"
+          data-name="电子琴"
+          data-x="49.5"
+          data-y="56.2"
+          data-size="13.9"
+          data-influence="1.12"
+          data-force="1.24"
+        >
+          <img src="./pic/dianziqin_transparent.png" alt="电子琴" draggable="false" />
+        </figure>
+
+        <figure
+          class="instrument instrument-drum"
+          data-id="drum"
+          data-name="架子鼓"
+          data-x="27.9"
+          data-y="55.5"
+          data-size="20.2"
+          data-influence="1.18"
+          data-force="1.16"
+        >
+          <img src="./pic/jiazigu_transparent.png" alt="架子鼓" draggable="false" />
+        </figure>
+
+        <figure
+          class="instrument instrument-guitar"
+          data-id="guitar"
+          data-name="吉他"
+          data-x="72.3"
+          data-y="48.5"
+          data-size="18.7"
+          data-influence="1"
+          data-force="1"
+        >
+          <img src="./pic/guitar_transparent.png" alt="吉他" draggable="false" />
+        </figure>
+      </section>
+    </main>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
