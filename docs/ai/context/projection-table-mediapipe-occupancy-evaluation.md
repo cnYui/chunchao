@@ -46,3 +46,9 @@
 - Google MediaPipe Web Hand Landmarker 文档说明，Web 端可用 `@mediapipe/tasks-vision`，视频模式使用 `detectForVideo()` 逐帧处理摄像头画面。
 - Hand Landmarker 输出手部 landmarks、world landmarks 和左右手信息，适合做手指位置映射。
 - Google 文档也说明 `detect()` / `detectForVideo()` 是同步调用，摄像头逐帧检测可能阻塞主线程，后续正式实现建议放入 Web Worker 或降低检测频率。
+
+## 实施备注
+
+- 已确认第一版实现继续采用 `ROI 占格检测 + MediaPipe 手部调控`
+- 已确认运行态保留调试层和现场验证清单，不把“完全免调试”作为第一版目标
+- 当前页面实现以 `synthesizer.html + synth/*.js` 模块形式接入，不改 `index.html` 和 `main.js` 的视频时间轴结构

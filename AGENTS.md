@@ -59,6 +59,10 @@
 - 当前桌面投影声音语义已确认：任意方块放入某格后该格开始发声，移开后停止发声；第一版不识别具体方块种类，只识别格子是否被占用
 - 当前桌面投影设计已确认采用双输入架构：`MediaPipe Hand Landmarker` 负责手部调控，`Occupancy Detector` 负责 16 格占格状态
 - 当前桌面投影第一版已确认采用手动四点标定、16 个 ROI baseline 差分、手部区域排除和状态机防抖
+- 当前桌面投影运行态已接入 `synthesizer.html -> synth/app.js` 模块入口，核心模块为 `audio-engine`、`camera-controller`、`projection-calibration`、`occupancy-detector`、`hand-controller`、`synth-router`、`debug-overlay`
+- 当前桌面投影页面保留右下角摄像头预览、四点标定、空场 baseline 按钮和 ROI 调试层，原因是第一版重点是现场可校准而不是完全免调试
+- 当前桌面投影页面保留鼠标作为后备输入：pad 支持按住发声，旋钮和滑杆支持鼠标拖动，原因是现场调试时不一定每次都先开摄像头
+- 当前桌面投影现场验证基线已确认：一次标定后进入运行态，方块放入 `300-500ms` 内开始发声，移开 `300-500ms` 内停止发声，手部可调节 `VIBE / VOL / REV / POS`
 
 ## 素材处理记忆
 
@@ -110,6 +114,7 @@
 - `pic/` 下素材属于运行主资源，默认纳入版本管理
 - `video/` 下素材属于运行主资源，默认纳入版本管理
 - `.codex-logs/` 属于本地运行日志，默认加入忽略，不上传 GitHub
+- Python 运行缓存 `__pycache__/` 和 `*.pyc` 属于本地生成物，不提交到 GitHub
 - 当前远程仓库地址为 `https://github.com/cnYui/chunchao.git`
 - 当前默认分支为 `main`，本地已与 `origin/main` 建立跟踪关系
 - `README.md` 只保留对外快速说明、运行方式和当前约束，设计推导继续沉淀到 `docs/ai/context/`

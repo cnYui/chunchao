@@ -377,3 +377,9 @@ baseline 建议至少保存：
 1. 优化标定、阈值和调试层
 2. 引入低干扰标记辅助占格检测
 3. 最后才考虑更重的视觉模型
+
+## 实现计划状态
+
+- 已生成实现计划文档：`docs/ai/context/2026-04-26-projection-table-laptop-camera-synth-implementation-plan.md`
+- 已按模块接入 `audio-engine`、`camera-controller`、`projection-calibration`、`occupancy-detector`、`hand-controller`、`synth-router`、`debug-overlay`
+- 当前运行态保留手动四点标定、空场 baseline 采集、摄像头预览小窗和 ROI 调试层

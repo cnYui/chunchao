@@ -5,6 +5,7 @@
 - 项目中的视频素材统一放在根目录 `video/`
 - 图片继续放在 `pic/`，不和视频混放
 - `video/` 下文件属于运行主资源，默认纳入版本管理
+- `video/*.mp4` 通过 Git LFS 提交，原因是部分运行视频超过 GitHub 普通 Git 单文件 100MB 限制
 
 ## 本次新增素材
 
@@ -17,16 +18,11 @@
 
 ## 后续新增素材
 
-- 新增复制到项目的 3 个视频：
-  - `video/0baa12eb2ae33a003c103a1a1a269781_raw.mp4`
-  - `video/ab039202842864c33ee0cfe180f29e57_raw.mp4`
-  - `video/7b8e95fe6e49261b02e7e7d8c41b8601_raw.mp4`
-- 当前前端时间轴实际引用已切换到这 3 个新视频
-- 旧的：
-  - `video/33bf26e484a3a504099f10ecbd2e8c13_part1.mp4`
-  - `video/33bf26e484a3a504099f10ecbd2e8c13_part2.mp4`
-  - `video/33bf26e484a3a504099f10ecbd2e8c13_part3.mp4`
-  继续保留在仓库中，不删除
+- 当前前端时间轴实际引用已切换到 3 个视频：
+  - 片段 1：`video/1a21117e4e7916df5b51a3864ea114a9_raw.mp4`
+  - 片段 2：`video/4577a95e9284af02d27603fb8d11bc3e_raw.mp4`
+  - 片段 3：`video/e1e4aa1ee14b1794a6d6d781f966be1a_raw.mp4`
+- 用户要求 `video/` 下后续只保留当前实际使用的 3 个视频，旧视频待删除确认后移除
 
 ## 原因
 
