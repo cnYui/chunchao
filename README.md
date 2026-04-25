@@ -11,9 +11,11 @@
 
 当前默认前端入口已临时切换为视频时间轴模式：
 
-- 默认播放 `video/33bf26e484a3a504099f10ecbd2e8c13.mp4`
-- 底部进度条支持鼠标点击跳转
-- 视频在 `42s` 插入 `bg2` 交互，在 `52s` 插入 `bg1` 交互
+- 当前顺播 3 段视频：
+  - `video/0baa12eb2ae33a003c103a1a1a269781_raw.mp4`
+  - `video/ab039202842864c33ee0cfe180f29e57_raw.mp4`
+  - `video/7b8e95fe6e49261b02e7e7d8c41b8601_raw.mp4`
+- 第一段视频结束后插入 `bg2` 交互，第二段视频结束后插入 `bg1` 交互
 - 每个交互页面右上角都有“继续”按钮，点击后恢复下一段视频播放
 
 ## 当前能力
@@ -71,7 +73,9 @@ http://localhost:8000
 - 当前背景：`pic/bg1.png`
 - 备用背景：`pic/bg2.png`
 - 当前谱面图：`pic/score-transparent.png`
-- 当前视频素材：`video/33bf26e484a3a504099f10ecbd2e8c13.mp4`
+- 当前时间轴视频 1：`video/0baa12eb2ae33a003c103a1a1a269781_raw.mp4`
+- 当前时间轴视频 2：`video/ab039202842864c33ee0cfe180f29e57_raw.mp4`
+- 当前时间轴视频 3：`video/7b8e95fe6e49261b02e7e7d8c41b8601_raw.mp4`
 - 乐器透明图：`pic/violin_transparent.png`
 - 乐器透明图：`pic/shuqin_transparent.png`
 - 乐器透明图：`pic/dianziqin_transparent.png`

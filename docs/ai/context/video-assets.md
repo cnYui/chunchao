@@ -15,6 +15,19 @@
 - 当前已复制到项目：
   `video/33bf26e484a3a504099f10ecbd2e8c13.mp4`
 
+## 后续新增素材
+
+- 新增复制到项目的 3 个视频：
+  - `video/0baa12eb2ae33a003c103a1a1a269781_raw.mp4`
+  - `video/ab039202842864c33ee0cfe180f29e57_raw.mp4`
+  - `video/7b8e95fe6e49261b02e7e7d8c41b8601_raw.mp4`
+- 当前前端时间轴实际引用已切换到这 3 个新视频
+- 旧的：
+  - `video/33bf26e484a3a504099f10ecbd2e8c13_part1.mp4`
+  - `video/33bf26e484a3a504099f10ecbd2e8c13_part2.mp4`
+  - `video/33bf26e484a3a504099f10ecbd2e8c13_part3.mp4`
+  继续保留在仓库中，不删除
+
 ## 原因
 
 - 当前项目已经把图片素材集中在 `pic/`

@@ -196,17 +196,17 @@ const scoreParticleState = {
 };
 const videoSegments = [
   {
-    src: "./video/33bf26e484a3a504099f10ecbd2e8c13_part1.mp4?v=20260425-opt3",
+    src: "./video/0baa12eb2ae33a003c103a1a1a269781_raw.mp4?v=20260425-newclips1",
     interactionIndex: 0,
     id: "video-part-1",
   },
   {
-    src: "./video/33bf26e484a3a504099f10ecbd2e8c13_part2.mp4?v=20260425-opt3",
+    src: "./video/ab039202842864c33ee0cfe180f29e57_raw.mp4?v=20260425-newclips1",
     interactionIndex: 1,
     id: "video-part-2",
   },
   {
-    src: "./video/33bf26e484a3a504099f10ecbd2e8c13_part3.mp4?v=20260425-opt3",
+    src: "./video/7b8e95fe6e49261b02e7e7d8c41b8601_raw.mp4?v=20260425-newclips1",
     interactionIndex: null,
     id: "video-part-3",
   },
