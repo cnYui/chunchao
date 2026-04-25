@@ -58,7 +58,6 @@ export const createUiControls = (root = document) => {
       pad.style.boxShadow = active
         ? '0 0 0 1px rgba(255, 208, 174, 0.8), 0 0 26px rgba(255, 96, 58, 0.6), inset 0 0 28px rgba(255, 84, 46, 0.25)'
         : '';
-      pad.style.transform = active ? 'translateY(-1px)' : '';
       pad.style.filter = active ? 'brightness(1.18) saturate(1.08)' : '';
     },
     setWaveform: (values) => {

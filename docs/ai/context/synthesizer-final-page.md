@@ -11,6 +11,8 @@
 - 按钮图案使用低透明度印在格子上，当前透明度标记为 `opacity-[0.34]`
 - 最终展示页已改成暗红舞台风格：黑红烟雾背景、旧金属控制台、暗红屏幕和低饱和按钮光泽
 - 当前只改视觉元素层，不改按钮点击逻辑、音高数组和播放器时间轴逻辑
+- 当前占格 ROI 在完成四点标定后生成，运行循环不再每帧重算 ROI
+- 当前 ROI 采样使用四边形 mask，只统计透视四边形内部像素，不再直接统计轴对齐包围盒全部像素
 
 ## 取舍
 
@@ -19,6 +21,8 @@
 - `gap` 从 `gap-5` 调整为 `gap-4`，原因是 `4x4` 下需要给 16 个按钮留出更稳定的显示空间
 - 贴图直接作为按钮内部的 `<img>`，并设置 `pointer-events-none`，原因是要避免图案遮挡原按钮点击事件
 - 暗红舞台风格通过 `club-stage`、`stage-console`、`stage-panel`、`stage-pad` 等样式类完成，原因是要把视觉改动和现有脚本逻辑隔离
+- pad 激活态不再修改按钮 `transform`，原因是要避免展示状态影响 `getBoundingClientRect()` 并污染 ROI 几何
+- ROI 采样先采用 mask 而不是完整透视 warp，原因是第一版需要先消除串格误判，mask 改动更小且足够覆盖当前占格检测
 
 ## 验证
 
@@ -30,5 +34,8 @@
   - 每个按钮图案都带 `pad-symbol` 和 `opacity-[0.34]`
   - 页面包含暗红舞台风格标记
   - `freqs` 音高数组长度为 16
+- 新增 `scripts/synth/roi-sampling.test.mjs`
+- 新增 `scripts/synth/ui-controls.test.mjs`
+- 两个测试分别检查四边形 ROI 不统计包围盒角落像素、pad 激活态不修改按钮 `transform`
 - 当前验证命令：
-  `node scripts/synthesizer-pad-count.test.mjs`
+  `node --test scripts/synthesizer-pad-count.test.mjs scripts/synth/*.test.mjs`

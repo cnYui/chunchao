@@ -9,6 +9,7 @@ import { createHandController } from './hand-controller.js';
 import { createHandBounds, mapPointToKnobAngle, mapPointToSliderValue } from './hand-math.js';
 import { createOccupancyDetector } from './occupancy-detector.js';
 import { createProjectiveTransform, mapDomRectToQuad } from './projection-calibration.js';
+import { computeMaskedFeatureFromImageData, getQuadBounds } from './roi-sampling.js';
 import { createSynthRouter } from './synth-router.js';
 import { createUiControls } from './ui-controls.js';
 
@@ -85,18 +86,6 @@ const getRectCorners = (rect) => {
   ];
 };
 
-const getQuadBounds = (quad) => {
-  const xs = quad.map((point) => point.x);
-  const ys = quad.map((point) => point.y);
-
-  return {
-    left: Math.min(...xs),
-    top: Math.min(...ys),
-    right: Math.max(...xs),
-    bottom: Math.max(...ys),
-  };
-};
-
 const expandRect = (rect, xPadding, yPadding = xPadding) => {
   return {
     left: rect.left - xPadding,
@@ -166,38 +155,15 @@ const computeFeatureForQuad = (video, quad, handBounds) => {
   analysisContext.drawImage(video, left, top, width, height, 0, 0, width, height);
 
   const { data } = analysisContext.getImageData(0, 0, width, height);
-  let brightnessSum = 0;
-  let brightnessSquareSum = 0;
-  let edgeHits = 0;
-
-  for (let index = 0; index < data.length; index += 4) {
-    const brightness = data[index] * 0.299 + data[index + 1] * 0.587 + data[index + 2] * 0.114;
-    brightnessSum += brightness;
-    brightnessSquareSum += brightness * brightness;
-
-    if (index >= 4) {
-      const prevBrightness = data[index - 4] * 0.299 + data[index - 3] * 0.587 + data[index - 2] * 0.114;
-      if (Math.abs(brightness - prevBrightness) > 18) {
-        edgeHits += 1;
-      }
-    }
-  }
-
-  const pixelCount = Math.max(1, data.length / 4);
-  const meanBrightness = brightnessSum / pixelCount;
-  const variance = brightnessSquareSum / pixelCount - meanBrightness * meanBrightness;
-
-  const overlapArea = !handBounds
-    ? 0
-    : Math.max(0, Math.min(handBounds.right, left + width) - Math.max(handBounds.left, left)) *
-      Math.max(0, Math.min(handBounds.bottom, top + height) - Math.max(handBounds.top, top));
-
-  return {
-    brightness: Number(meanBrightness.toFixed(4)),
-    variance: Number(variance.toFixed(4)),
-    edgeDensity: Number((edgeHits / pixelCount).toFixed(4)),
-    overlapWithHand: Number((overlapArea / (width * height)).toFixed(4)),
-  };
+  return computeMaskedFeatureFromImageData({
+    data,
+    width,
+    height,
+    offsetX: left,
+    offsetY: top,
+    quad,
+    handBounds,
+  });
 };
 
 const samplePadFeatures = (video, rois, handBounds) => {
@@ -531,7 +497,6 @@ const startCamera = async () => {
 const loop = (now) => {
   if (state.cameraReady && state.handReady && cameraPreview.readyState >= 2) {
     uiControls.setWaveform(browserAudio.getAnalyserByteData());
-    syncProjectionGeometry();
 
     if (state.baselineReady && state.padRois.length === frequencies.length) {
       const handState = handController.detect({
