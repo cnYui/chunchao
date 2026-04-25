@@ -1,5 +1,30 @@
 const scene = document.querySelector("#scene");
+const sceneStage = document.querySelector("#scene-stage");
+const scenes = Array.from(document.querySelectorAll(".scene"));
 const instrumentElements = Array.from(document.querySelectorAll(".instrument"));
+const frontMode = document.body.dataset.frontMode ?? "interactive";
+const isInteractiveMode = frontMode === "interactive";
+const isVideoTimelineMode = frontMode === "video-timeline";
+const shouldInitializeInteractionLayer = isInteractiveMode || isVideoTimelineMode;
+const videoStage = document.querySelector("#video-stage");
+const referenceVideo = document.querySelector("#reference-video");
+const videoActions = document.querySelector("#video-actions");
+const videoSkipButton = document.querySelector("#video-skip");
+const interactionActions = document.querySelector("#interaction-actions");
+const interactionContinueButton = document.querySelector("#interaction-continue");
+const pageNav = document.querySelector(".page-nav");
+const pagePrevButton = document.querySelector("#page-prev");
+const pageNextButton = document.querySelector("#page-next");
+const pageCurrent = document.querySelector("#page-current");
+const pageTotal = document.querySelector("#page-total");
+const scoreSheet = document.querySelector("#score-sheet");
+const scoreSheetImage = document.querySelector("#score-sheet-image");
+const scoreParticleCanvas = document.querySelector("#score-particle-canvas");
+const scoreParticleContext = scoreParticleCanvas.getContext("2d");
+const trackingPreview = document.querySelector("#tracking-preview");
+const trackingPreviewVideo = document.querySelector("#tracking-preview-video");
+const trackingPreviewOverlay = document.querySelector("#tracking-preview-overlay");
+const trackingPreviewContext = trackingPreviewOverlay.getContext("2d");
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const smoothStep = (current, target, alpha) => current + (target - current) * alpha;
@@ -32,6 +57,43 @@ const physics = {
   damping: 0.95,
   xLimit: 0.32,
   yLimit: 0.36,
+};
+
+const scoreParticleConfig = {
+  sampleStep: 4,
+  alphaThreshold: 22,
+  darknessThreshold: 0.08,
+  interactionRadius: 88,
+  repelStrength: 14,
+  swirlStrength: 3.2,
+  spring: 0.085,
+  damping: 0.88,
+  maxSpeed: 26,
+  touchLandmarkIndices: [0, 4, 8, 12, 16, 20],
+};
+
+const handConnections = [
+  [0, 1], [1, 2], [2, 3], [3, 4],
+  [0, 5], [5, 6], [6, 7], [7, 8],
+  [5, 9], [9, 10], [10, 11], [11, 12],
+  [9, 13], [13, 14], [14, 15], [15, 16],
+  [13, 17], [17, 18], [18, 19], [19, 20],
+  [0, 17],
+];
+
+const handColors = {
+  Left: {
+    stroke: "rgba(255, 182, 120, 0.9)",
+    fill: "rgba(255, 236, 213, 0.96)",
+  },
+  Right: {
+    stroke: "rgba(118, 220, 255, 0.92)",
+    fill: "rgba(221, 247, 255, 0.98)",
+  },
+  Unknown: {
+    stroke: "rgba(255, 246, 230, 0.88)",
+    fill: "rgba(255, 255, 255, 0.98)",
+  },
 };
 
 const handTrackingConfig = {
@@ -71,9 +133,60 @@ const trackingState = {
   preferredHandedness: "Unknown",
   smoothedX: 0.5,
   smoothedY: 0.5,
+  scoreTouchPoints: [],
 };
 
-let sceneRect = scene.getBoundingClientRect();
+const defaultScoreState = {
+  x: 46.6,
+  y: 18.7,
+  width: 83,
+  height: 140.1,
+  scale: 0.3,
+};
+
+const scoreState = { ...defaultScoreState };
+const scoreParticleState = {
+  particles: [],
+  ready: false,
+  layoutWidth: 0,
+  layoutHeight: 0,
+  sourceCanvas: document.createElement("canvas"),
+  sourceContext: null,
+};
+const videoSegments = [
+  {
+    src: "./video/33bf26e484a3a504099f10ecbd2e8c13_part1.mp4",
+    interactionIndex: 0,
+    id: "video-part-1",
+  },
+  {
+    src: "./video/33bf26e484a3a504099f10ecbd2e8c13_part2.mp4",
+    interactionIndex: 1,
+    id: "video-part-2",
+  },
+  {
+    src: "./video/33bf26e484a3a504099f10ecbd2e8c13_part3.mp4",
+    interactionIndex: null,
+    id: "video-part-3",
+  },
+];
+const interactionTimeline = [
+  {
+    sceneIndex: 1,
+    id: "bg2-score",
+  },
+  {
+    sceneIndex: 0,
+    id: "bg1-music",
+  },
+];
+const timelineState = {
+  activeInteractionIndex: null,
+  currentSegmentIndex: 0,
+};
+
+let currentPageIndex = 0;
+let sceneRect = sceneStage.getBoundingClientRect();
 
 const instruments = instrumentElements.map((element) => {
   const x = Number(element.dataset.x);
@@ -100,9 +213,179 @@ const instruments = instrumentElements.map((element) => {
   };
 });
 
-const measureScene = () => {
-  sceneRect = scene.getBoundingClientRect();
+const syncVideoSkipUi = () => {
+  if (!videoActions) {
+    return;
+  }
+
+  const hasPendingInteraction =
+    isVideoTimelineMode &&
+    timelineState.activeInteractionIndex === null &&
+    getCurrentVideoSegment()?.interactionIndex !== null;
+
+  videoActions.classList.toggle("is-hidden", !hasPendingInteraction);
+  videoActions.setAttribute("aria-hidden", hasPendingInteraction ? "false" : "true");
 };
+
+const getInteractionStep = (interactionIndex) => {
+  return interactionTimeline[interactionIndex] ?? null;
+};
+
+const getCurrentVideoSegment = () => {
+  return videoSegments[timelineState.currentSegmentIndex] ?? null;
+};
+
+const setVideoSegment = (segmentIndex) => {
+  if (!referenceVideo || !videoSegments.length) {
+    return;
+  }
+
+  const safeIndex = clamp(segmentIndex, 0, videoSegments.length - 1);
+  const nextSegment = videoSegments[safeIndex];
+  if (!nextSegment) {
+    return;
+  }
+
+  timelineState.currentSegmentIndex = safeIndex;
+
+  if (referenceVideo.getAttribute("src") !== nextSegment.src) {
+    referenceVideo.setAttribute("src", nextSegment.src);
+    referenceVideo.load();
+  }
+};
+
+const playReferenceVideo = async () => {
+  if (!referenceVideo) {
+    return;
+  }
+
+  // 浏览器默认拦截带声音的自动播放，这里先固定静音，确保刷新后能直接进入时间轴。
+  referenceVideo.defaultMuted = true;
+  referenceVideo.muted = true;
+  await referenceVideo.play().catch(() => undefined);
+};
+
+const setInteractionUiVisible = (visible) => {
+  document.body.classList.toggle("is-interaction-active", visible);
+
+  if (sceneStage) {
+    sceneStage.classList.toggle("is-hidden", !visible);
+    sceneStage.setAttribute("aria-hidden", visible ? "false" : "true");
+  }
+
+  if (interactionActions) {
+    interactionActions.classList.toggle("is-hidden", !visible);
+    interactionActions.setAttribute("aria-hidden", visible ? "false" : "true");
+  }
+
+  if (trackingPreview) {
+    trackingPreview.classList.toggle("is-hidden", !visible);
+    trackingPreview.setAttribute("aria-hidden", visible ? "false" : "true");
+  }
+
+  syncVideoSkipUi();
+};
+
+const openTimelineInteraction = (interactionIndex) => {
+  if (!isVideoTimelineMode) {
+    return;
+  }
+
+  const step = getInteractionStep(interactionIndex);
+  if (!step || timelineState.activeInteractionIndex !== null) {
+    return;
+  }
+
+  timelineState.activeInteractionIndex = interactionIndex;
+  referenceVideo?.pause();
+  setPage(step.sceneIndex);
+  setInteractionUiVisible(true);
+  ensureHandTracking();
+
+  requestAnimationFrame(() => {
+    measureScene();
+    rebuildScoreParticles();
+  });
+};
+
+const openInteractionForCurrentSegment = () => {
+  if (!isVideoTimelineMode || timelineState.activeInteractionIndex !== null) {
+    return;
+  }
+
+  const currentSegment = getCurrentVideoSegment();
+  if (currentSegment?.interactionIndex === null || currentSegment?.interactionIndex === undefined) {
+    syncVideoSkipUi();
+    return;
+  }
+
+  openTimelineInteraction(currentSegment.interactionIndex);
+};
+
+const continueTimelinePlayback = async () => {
+  if (!isVideoTimelineMode || timelineState.activeInteractionIndex === null) {
+    return;
+  }
+
+  const nextSegmentIndex = timelineState.currentSegmentIndex + 1;
+  timelineState.activeInteractionIndex = null;
+  pointerSource.active = false;
+  setInteractionUiVisible(false);
+  setVideoSegment(nextSegmentIndex);
+
+  await playReferenceVideo();
+  syncVideoSkipUi();
+};
+
+const skipToNextInteraction = () => {
+  if (!isVideoTimelineMode || timelineState.activeInteractionIndex !== null) {
+    return;
+  }
+
+  openInteractionForCurrentSegment();
+};
+
+const setupVideoPlayer = () => {
+  if (!referenceVideo) {
+    return;
+  }
+
+  setInteractionUiVisible(false);
+  referenceVideo.defaultMuted = true;
+  referenceVideo.muted = true;
+  setVideoSegment(0);
+  syncVideoSkipUi();
+
+  referenceVideo.addEventListener("loadedmetadata", () => {
+    playReferenceVideo();
+  });
+
+  referenceVideo.addEventListener("canplay", () => {
+    playReferenceVideo();
+  });
+
+  referenceVideo.addEventListener("ended", () => {
+    openInteractionForCurrentSegment();
+  });
+
+  videoSkipButton?.addEventListener("click", () => {
+    skipToNextInteraction();
+  });
+
+  interactionContinueButton?.addEventListener("click", () => {
+    continueTimelinePlayback();
+  });
+
+  playReferenceVideo();
+};
+
+const measureScene = () => {
+  sceneRect = sceneStage.getBoundingClientRect();
+};
+
+scoreParticleState.sourceContext = scoreParticleState.sourceCanvas.getContext("2d", {
+  willReadFrequently: true,
+});
 
 const updatePointer = (event) => {
   pointerSource.active = true;
@@ -112,6 +395,10 @@ const updatePointer = (event) => {
 };
 
 const getActiveInteractionSource = (currentTime) => {
+  if (currentPageIndex !== 0) {
+    return null;
+  }
+
   if (handSource.active && currentTime - handSource.timestamp <= handTrackingConfig.staleMs) {
     return handSource;
   }
@@ -123,9 +410,366 @@ const getActiveInteractionSource = (currentTime) => {
   return null;
 };
 
+const applyScoreState = () => {
+  scoreSheet.style.setProperty("--score-x", `${scoreState.x}%`);
+  scoreSheet.style.setProperty("--score-y", `${scoreState.y}%`);
+  scoreSheet.style.setProperty("--score-width", `${scoreState.width}%`);
+  scoreSheet.style.setProperty("--score-height", `${scoreState.height}%`);
+  scoreSheet.style.setProperty("--score-scale", String(scoreState.scale));
+};
+
+const resizeScoreParticleCanvas = () => {
+  const width = Math.round(scoreSheet.clientWidth);
+  const height = Math.round(scoreSheet.clientHeight);
+
+  if (width <= 0 || height <= 0) {
+    scoreParticleState.layoutWidth = 0;
+    scoreParticleState.layoutHeight = 0;
+    return { width: 0, height: 0 };
+  }
+
+  if (scoreParticleCanvas.width !== width) {
+    scoreParticleCanvas.width = width;
+  }
+
+  if (scoreParticleCanvas.height !== height) {
+    scoreParticleCanvas.height = height;
+  }
+
+  scoreParticleState.layoutWidth = width;
+  scoreParticleState.layoutHeight = height;
+
+  return { width, height };
+};
+
+const rebuildScoreParticles = () => {
+  if (
+    !scoreParticleContext ||
+    !scoreParticleState.sourceContext ||
+    !scoreSheetImage.complete ||
+    !scoreSheetImage.naturalWidth
+  ) {
+    return;
+  }
+
+  const { width, height } = resizeScoreParticleCanvas();
+  if (!width || !height) {
+    return;
+  }
+
+  scoreParticleState.sourceCanvas.width = width;
+  scoreParticleState.sourceCanvas.height = height;
+  scoreParticleState.sourceContext.clearRect(0, 0, width, height);
+  scoreParticleState.sourceContext.drawImage(scoreSheetImage, 0, 0, width, height);
+
+  const imageData = scoreParticleState.sourceContext.getImageData(0, 0, width, height).data;
+  const particles = [];
+  const step = scoreParticleConfig.sampleStep;
+
+  for (let y = 0; y < height; y += step) {
+    for (let x = 0; x < width; x += step) {
+      let strongestAlpha = 0;
+      let strongestDarkness = 0;
+
+      for (let by = 0; by < step && y + by < height; by += 1) {
+        for (let bx = 0; bx < step && x + bx < width; bx += 1) {
+          const index = ((y + by) * width + (x + bx)) * 4;
+          const r = imageData[index];
+          const g = imageData[index + 1];
+          const b = imageData[index + 2];
+          const alpha = imageData[index + 3];
+          const darkness = 1 - (r + g + b) / (255 * 3);
+
+          if (alpha > strongestAlpha) {
+            strongestAlpha = alpha;
+          }
+
+          if (darkness > strongestDarkness) {
+            strongestDarkness = darkness;
+          }
+        }
+      }
+
+      if (
+        strongestAlpha >= scoreParticleConfig.alphaThreshold &&
+        strongestDarkness >= scoreParticleConfig.darknessThreshold
+      ) {
+        const particleX = Math.min(width, x + step * 0.5);
+        const particleY = Math.min(height, y + step * 0.5);
+        const alpha = 0.18 + (strongestAlpha / 255) * 0.82;
+        const size = Math.max(1.2, step * (0.42 + strongestDarkness * 0.66));
+
+        particles.push({
+          x: particleX,
+          y: particleY,
+          homeX: particleX,
+          homeY: particleY,
+          velocityX: 0,
+          velocityY: 0,
+          alpha,
+          size,
+        });
+      }
+    }
+  }
+
+  scoreParticleState.particles = particles;
+  scoreParticleState.ready = particles.length > 0;
+  scoreSheet.classList.toggle("is-particle-ready", scoreParticleState.ready);
+};
+
+const mapPointToScene = (point) => {
+  const mappedX = normalizeWithinRange(
+    point.x,
+    handTrackingConfig.mapping.left,
+    handTrackingConfig.mapping.right,
+  );
+  const mappedY = normalizeWithinRange(
+    point.y,
+    handTrackingConfig.mapping.top,
+    handTrackingConfig.mapping.bottom,
+  );
+
+  return {
+    x: handTrackingConfig.mapping.mirrorX ? 1 - mappedX : mappedX,
+    y: mappedY,
+  };
+};
+
+const mapScenePointToScore = (point) => {
+  if (!scoreParticleState.layoutWidth || !scoreParticleState.layoutHeight) {
+    return null;
+  }
+
+  const scoreRect = scoreSheet.getBoundingClientRect();
+  if (!scoreRect.width || !scoreRect.height) {
+    return null;
+  }
+
+  const globalX = sceneRect.left + point.x * sceneRect.width;
+  const globalY = sceneRect.top + point.y * sceneRect.height;
+  const hitPadding = scoreParticleConfig.interactionRadius;
+
+  if (
+    globalX < scoreRect.left - hitPadding ||
+    globalX > scoreRect.right + hitPadding ||
+    globalY < scoreRect.top - hitPadding ||
+    globalY > scoreRect.bottom + hitPadding
+  ) {
+    return null;
+  }
+
+  return {
+    x: ((globalX - scoreRect.left) / scoreRect.width) * scoreParticleState.layoutWidth,
+    y: ((globalY - scoreRect.top) / scoreRect.height) * scoreParticleState.layoutHeight,
+  };
+};
+
+const getScoreInteractionPoints = () => {
+  if (currentPageIndex !== 1 || !scoreParticleState.ready) {
+    return [];
+  }
+
+  const points = trackingState.scoreTouchPoints
+    .map(mapScenePointToScore)
+    .filter(Boolean);
+
+  if (!points.length && pointerSource.active) {
+    const fallbackPoint = mapScenePointToScore(pointerSource);
+    if (fallbackPoint) {
+      points.push(fallbackPoint);
+    }
+  }
+
+  return points;
+};
+
+const updateScoreParticles = (delta) => {
+  if (!scoreParticleContext || !scoreParticleState.ready) {
+    return;
+  }
+
+  const { width, height } = resizeScoreParticleCanvas();
+  const interactionPoints = getScoreInteractionPoints();
+  const radius = scoreParticleConfig.interactionRadius;
+  const radiusSquared = radius * radius;
+  const damping = Math.pow(scoreParticleConfig.damping, delta);
+
+  scoreParticleContext.clearRect(0, 0, width, height);
+
+  for (const particle of scoreParticleState.particles) {
+    for (const touchPoint of interactionPoints) {
+      const dx = particle.x - touchPoint.x;
+      const dy = particle.y - touchPoint.y;
+      const distanceSquared = dx * dx + dy * dy;
+
+      if (distanceSquared < radiusSquared) {
+        const distance = Math.sqrt(distanceSquared) || 0.0001;
+        const intensity = 1 - distance / radius;
+        const force = intensity * intensity * scoreParticleConfig.repelStrength * delta;
+        const normalX = dx / distance;
+        const normalY = dy / distance;
+
+        particle.velocityX += normalX * force - normalY * force * 0.22 * scoreParticleConfig.swirlStrength;
+        particle.velocityY += normalY * force + normalX * force * 0.22 * scoreParticleConfig.swirlStrength;
+      }
+    }
+
+    particle.velocityX += (particle.homeX - particle.x) * scoreParticleConfig.spring * delta;
+    particle.velocityY += (particle.homeY - particle.y) * scoreParticleConfig.spring * delta;
+    particle.velocityX *= damping;
+    particle.velocityY *= damping;
+
+    const speed = Math.hypot(particle.velocityX, particle.velocityY);
+    if (speed > scoreParticleConfig.maxSpeed) {
+      const ratio = scoreParticleConfig.maxSpeed / speed;
+      particle.velocityX *= ratio;
+      particle.velocityY *= ratio;
+    }
+
+    particle.x += particle.velocityX * delta;
+    particle.y += particle.velocityY * delta;
+
+    scoreParticleContext.globalAlpha = particle.alpha;
+    scoreParticleContext.fillStyle = "#050505";
+    scoreParticleContext.fillRect(
+      particle.x - particle.size * 0.5,
+      particle.y - particle.size * 0.5,
+      particle.size,
+      particle.size,
+    );
+  }
+
+  scoreParticleContext.globalAlpha = 1;
+};
+
+const setPage = (nextIndex) => {
+  const targetIndex = clamp(nextIndex, 0, scenes.length - 1);
+
+  if (targetIndex === currentPageIndex) {
+    return;
+  }
+
+  currentPageIndex = targetIndex;
+  pointerSource.active = false;
+  measureScene();
+  updatePaginationUi();
+};
+
+const updatePaginationUi = () => {
+  sceneStage.dataset.pageIndex = String(currentPageIndex);
+  document.body.dataset.pageIndex = String(currentPageIndex);
+  scenes.forEach((page, index) => {
+    page.classList.toggle("is-active", index === currentPageIndex);
+  });
+
+  pageCurrent.textContent = String(currentPageIndex + 1);
+  pageTotal.textContent = String(scenes.length);
+  pagePrevButton.disabled = currentPageIndex === 0;
+  pageNextButton.disabled = currentPageIndex === scenes.length - 1;
+};
+
 const normalizeWithinRange = (value, min, max) => {
   const span = Math.max(max - min, 0.0001);
   return clamp((value - min) / span, 0, 1);
+};
+
+const resizePreviewCanvas = () => {
+  if (!trackingPreviewContext) {
+    return {
+      width: trackingPreviewOverlay.clientWidth,
+      height: trackingPreviewOverlay.clientHeight,
+    };
+  }
+
+  const rect = trackingPreviewOverlay.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const width = Math.max(1, Math.round(rect.width * dpr));
+  const height = Math.max(1, Math.round(rect.height * dpr));
+
+  if (trackingPreviewOverlay.width !== width || trackingPreviewOverlay.height !== height) {
+    trackingPreviewOverlay.width = width;
+    trackingPreviewOverlay.height = height;
+  }
+
+  trackingPreviewContext.setTransform(1, 0, 0, 1, 0, 0);
+  trackingPreviewContext.scale(dpr, dpr);
+
+  return {
+    width: rect.width,
+    height: rect.height,
+  };
+};
+
+const clearTrackingPreview = () => {
+  if (!trackingPreviewContext) {
+    trackingPreview.classList.remove("is-detected");
+    return;
+  }
+
+  const { width, height } = resizePreviewCanvas();
+  trackingPreviewContext.clearRect(0, 0, width, height);
+  trackingPreview.classList.remove("is-detected");
+};
+
+const drawHandConnection = (ctx, landmarks, fromIndex, toIndex, color, width, height) => {
+  const from = landmarks[fromIndex];
+  const to = landmarks[toIndex];
+  ctx.beginPath();
+  ctx.moveTo(from.x * width, from.y * height);
+  ctx.lineTo(to.x * width, to.y * height);
+  ctx.strokeStyle = color.stroke;
+  ctx.lineWidth = 2.2;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.stroke();
+};
+
+const drawHandPoints = (ctx, landmarks, color, width, height) => {
+  for (const landmark of landmarks) {
+    ctx.beginPath();
+    ctx.arc(landmark.x * width, landmark.y * height, 3.2, 0, Math.PI * 2);
+    ctx.fillStyle = color.fill;
+    ctx.fill();
+  }
+};
+
+const renderTrackingPreview = (results) => {
+  if (!trackingPreviewContext) {
+    return;
+  }
+
+  const { width, height } = resizePreviewCanvas();
+  trackingPreviewContext.clearRect(0, 0, width, height);
+
+  const landmarksList = results?.landmarks ?? [];
+  const handednessGroups = results?.handednesses ?? results?.handedness ?? [];
+
+  if (!landmarksList.length) {
+    trackingPreview.classList.remove("is-detected");
+    return;
+  }
+
+  trackingPreview.classList.add("is-detected");
+
+  landmarksList.forEach((landmarks, index) => {
+    const handedness = handednessGroups[index]?.[0]?.categoryName ?? "Unknown";
+    const color = handColors[handedness] ?? handColors.Unknown;
+
+    handConnections.forEach(([fromIndex, toIndex]) => {
+      drawHandConnection(
+        trackingPreviewContext,
+        landmarks,
+        fromIndex,
+        toIndex,
+        color,
+        width,
+        height,
+      );
+    });
+
+    drawHandPoints(trackingPreviewContext, landmarks, color, width, height);
+  });
 };
 
 const getPalmCenter = (landmarks) => {
@@ -146,24 +790,6 @@ const getPalmCenter = (landmarks) => {
   };
 };
 
-const mapPalmToScene = (palmCenter) => {
-  const mappedX = normalizeWithinRange(
-    palmCenter.x,
-    handTrackingConfig.mapping.left,
-    handTrackingConfig.mapping.right,
-  );
-  const mappedY = normalizeWithinRange(
-    palmCenter.y,
-    handTrackingConfig.mapping.top,
-    handTrackingConfig.mapping.bottom,
-  );
-
-  return {
-    x: handTrackingConfig.mapping.mirrorX ? 1 - mappedX : mappedX,
-    y: mappedY,
-  };
-};
-
 const pickPrimaryHand = (candidates) => {
   const preferredCandidate = candidates.find(
     (candidate) => candidate.handedness === trackingState.preferredHandedness,
@@ -180,18 +806,24 @@ const pickPrimaryHand = (candidates) => {
 
 const updateHandSource = (results, currentTime) => {
   const handednessGroups = results.handednesses ?? results.handedness ?? [];
+  trackingState.scoreTouchPoints = [];
+
   const candidates = (results.landmarks ?? [])
     .map((landmarks, index) => {
       const handedness = handednessGroups[index]?.[0]?.categoryName ?? "Unknown";
       const confidence = handednessGroups[index]?.[0]?.score ?? 0;
       const palmCenter = getPalmCenter(landmarks);
-      const mappedPoint = mapPalmToScene(palmCenter);
+      const mappedPoint = mapPointToScene(palmCenter);
+      const touchPoints = scoreParticleConfig.touchLandmarkIndices.map((touchIndex) => (
+        mapPointToScene(landmarks[touchIndex])
+      ));
 
       return {
         x: mappedPoint.x,
         y: mappedPoint.y,
         confidence,
         handedness,
+        touchPoints,
       };
     })
     .filter((candidate) => candidate.confidence >= handTrackingConfig.minConfidence);
@@ -221,6 +853,7 @@ const updateHandSource = (results, currentTime) => {
     );
   }
 
+  trackingState.scoreTouchPoints = candidates.flatMap((candidate) => candidate.touchPoints);
   handSource.active = true;
   handSource.x = trackingState.smoothedX;
   handSource.y = trackingState.smoothedY;
@@ -231,20 +864,7 @@ const updateHandSource = (results, currentTime) => {
 };
 
 const createTrackingVideo = () => {
-  const video = document.createElement("video");
-  video.autoplay = true;
-  video.muted = true;
-  video.playsInline = true;
-  video.setAttribute("aria-hidden", "true");
-  video.style.position = "fixed";
-  video.style.top = "0";
-  video.style.left = "-9999px";
-  video.style.width = "1px";
-  video.style.height = "1px";
-  video.style.opacity = "0";
-  video.style.pointerEvents = "none";
-  document.body.append(video);
-  return video;
+  return trackingPreviewVideo;
 };
 
 const waitForVideoReady = (video) => new Promise((resolve, reject) => {
@@ -274,7 +894,11 @@ const waitForVideoReady = (video) => new Promise((resolve, reject) => {
 
 const cleanupTrackingResources = () => {
   trackingState.stream?.getTracks().forEach((track) => track.stop());
-  trackingState.video?.remove();
+  if (trackingState.video) {
+    trackingState.video.srcObject = null;
+    trackingState.video.removeAttribute("src");
+  }
+  trackingState.video?.load();
   trackingState.handLandmarker = null;
   trackingState.stream = null;
   trackingState.video = null;
@@ -282,9 +906,11 @@ const cleanupTrackingResources = () => {
   trackingState.lastVideoTime = -1;
   trackingState.lastPredictAt = 0;
   trackingState.preferredHandedness = "Unknown";
+  trackingState.scoreTouchPoints = [];
   handSource.active = false;
   handSource.confidence = 0;
   handSource.handedness = "Unknown";
+  clearTrackingPreview();
 };
 
 const createHandLandmarker = async () => {
@@ -366,6 +992,7 @@ const trackHands = (currentTime) => {
       );
 
       updateHandSource(results, currentTime);
+      renderTrackingPreview(results);
       trackingState.lastVideoTime = trackingState.video.currentTime;
       trackingState.lastPredictAt = currentTime;
     } catch (error) {
@@ -376,24 +1003,6 @@ const trackHands = (currentTime) => {
 
   requestAnimationFrame(trackHands);
 };
-
-scene.addEventListener("pointerenter", (event) => {
-  measureScene();
-  updatePointer(event);
-});
-
-scene.addEventListener("pointermove", (event) => {
-  updatePointer(event);
-});
-
-scene.addEventListener("pointerleave", () => {
-  pointerSource.active = false;
-});
-
-window.addEventListener("resize", measureScene);
-window.addEventListener("pointerdown", () => {
-  ensureHandTracking();
-}, { passive: true });
 
 let previousTime = performance.now();
 
@@ -457,10 +1066,85 @@ const animate = (currentTime) => {
       `translate3d(calc(-50% + ${item.offsetX}px), calc(-50% + ${item.offsetY}px), 0)`;
   }
 
+  updateScoreParticles(delta);
   requestAnimationFrame(animate);
 };
 
-measureScene();
-ensureHandTracking();
-requestAnimationFrame(trackHands);
-requestAnimationFrame(animate);
+setupVideoPlayer();
+
+if (shouldInitializeInteractionLayer) {
+  sceneStage.addEventListener("pointerenter", (event) => {
+    measureScene();
+    updatePointer(event);
+  });
+
+  sceneStage.addEventListener("pointermove", (event) => {
+    updatePointer(event);
+  });
+
+  sceneStage.addEventListener("pointerdown", (event) => {
+    measureScene();
+    updatePointer(event);
+  });
+
+  sceneStage.addEventListener("pointerleave", () => {
+    pointerSource.active = false;
+  });
+
+  sceneStage.addEventListener("pointercancel", () => {
+    pointerSource.active = false;
+  });
+
+  window.addEventListener("resize", () => {
+    measureScene();
+    rebuildScoreParticles();
+  });
+
+  window.addEventListener("pointerdown", () => {
+    if (isInteractiveMode || timelineState.activeInteractionIndex !== null) {
+      ensureHandTracking();
+    }
+  }, { passive: true });
+
+  measureScene();
+  applyScoreState();
+  rebuildScoreParticles();
+  updatePaginationUi();
+  clearTrackingPreview();
+
+  if (isInteractiveMode) {
+    videoStage?.classList.add("is-hidden");
+    sceneStage.classList.remove("is-hidden");
+    sceneStage.setAttribute("aria-hidden", "false");
+    pageNav?.classList.remove("is-hidden");
+    pageNav?.setAttribute("aria-hidden", "false");
+    trackingPreview.classList.remove("is-hidden");
+    trackingPreview.setAttribute("aria-hidden", "false");
+    ensureHandTracking();
+
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowLeft") {
+        setPage(currentPageIndex - 1);
+      }
+
+      if (event.key === "ArrowRight") {
+        setPage(currentPageIndex + 1);
+      }
+    });
+
+    pagePrevButton.addEventListener("click", () => {
+      setPage(currentPageIndex - 1);
+    });
+
+    pageNextButton.addEventListener("click", () => {
+      setPage(currentPageIndex + 1);
+    });
+  }
+
+  if (!scoreSheetImage.complete) {
+    scoreSheetImage.addEventListener("load", rebuildScoreParticles, { once: true });
+  }
+
+  requestAnimationFrame(trackHands);
+  requestAnimationFrame(animate);
+}

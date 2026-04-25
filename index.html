@@ -9,81 +9,195 @@
     <title>春潮乐器场景</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
-  <body>
+  <body data-front-mode="video-timeline">
     <main class="page-shell">
       <section
-        class="scene"
-        id="scene"
-        aria-label="可交互的排练室乐器场景"
+        class="video-stage"
+        id="video-stage"
+        aria-label="参考视频预览"
       >
-        <div class="scene-overlay" aria-hidden="true"></div>
-
-        <figure
-          class="instrument instrument-violin"
-          data-id="violin"
-          data-name="提琴"
-          data-x="62.5"
-          data-y="50.3"
-          data-size="20"
-          data-influence="1.05"
-          data-force="1.1"
-        >
-          <img src="./pic/violin_transparent.png" alt="提琴" draggable="false" />
-        </figure>
-
-        <figure
-          class="instrument instrument-harp"
-          data-id="harp"
-          data-name="竖琴"
-          data-x="82.3"
-          data-y="53.3"
-          data-size="16.9"
-          data-influence="0.95"
-          data-force="0.92"
-        >
-          <img src="./pic/shuqin_transparent.png" alt="竖琴" draggable="false" />
-        </figure>
-
-        <figure
-          class="instrument instrument-keyboard"
-          data-id="keyboard"
-          data-name="电子琴"
-          data-x="49.5"
-          data-y="56.2"
-          data-size="13.9"
-          data-influence="1.12"
-          data-force="1.24"
-        >
-          <img src="./pic/dianziqin_transparent.png" alt="电子琴" draggable="false" />
-        </figure>
-
-        <figure
-          class="instrument instrument-drum"
-          data-id="drum"
-          data-name="架子鼓"
-          data-x="27.9"
-          data-y="55.5"
-          data-size="20.2"
-          data-influence="1.18"
-          data-force="1.16"
-        >
-          <img src="./pic/jiazigu_transparent.png" alt="架子鼓" draggable="false" />
-        </figure>
-
-        <figure
-          class="instrument instrument-guitar"
-          data-id="guitar"
-          data-name="吉他"
-          data-x="72.3"
-          data-y="48.5"
-          data-size="18.7"
-          data-influence="1"
-          data-force="1"
-        >
-          <img src="./pic/guitar_transparent.png" alt="吉他" draggable="false" />
-        </figure>
+        <video
+          class="video-stage__player"
+          id="reference-video"
+          src="./video/33bf26e484a3a504099f10ecbd2e8c13_part1.mp4"
+          preload="metadata"
+          autoplay
+          muted
+          playsinline
+        ></video>
+        <div class="video-stage__actions" id="video-actions" aria-hidden="false">
+          <button
+            class="video-stage__skip"
+            id="video-skip"
+            type="button"
+          >
+            跳过
+          </button>
+        </div>
       </section>
+
+      <div
+        class="scene-stage is-hidden"
+        id="scene-stage"
+        data-page-index="0"
+        aria-hidden="true"
+      >
+        <div
+          class="interaction-actions is-hidden"
+          id="interaction-actions"
+          aria-hidden="true"
+        >
+          <button
+            class="interaction-actions__continue"
+            id="interaction-continue"
+            type="button"
+          >
+            继续
+          </button>
+        </div>
+
+        <section
+          class="scene scene--music is-active"
+          id="scene"
+          aria-label="可交互的排练室乐器场景"
+        >
+          <div class="scene-overlay" aria-hidden="true"></div>
+
+          <figure
+            class="instrument instrument-violin"
+            data-id="violin"
+            data-name="提琴"
+            data-x="62.5"
+            data-y="50.3"
+            data-size="20"
+            data-influence="1.05"
+            data-force="1.1"
+          >
+            <img src="./pic/violin_transparent.png" alt="提琴" draggable="false" />
+          </figure>
+
+          <figure
+            class="instrument instrument-harp"
+            data-id="harp"
+            data-name="竖琴"
+            data-x="82.3"
+            data-y="53.3"
+            data-size="16.9"
+            data-influence="0.95"
+            data-force="0.92"
+          >
+            <img src="./pic/shuqin_transparent.png" alt="竖琴" draggable="false" />
+          </figure>
+
+          <figure
+            class="instrument instrument-keyboard"
+            data-id="keyboard"
+            data-name="电子琴"
+            data-x="49.5"
+            data-y="56.2"
+            data-size="13.9"
+            data-influence="1.12"
+            data-force="1.24"
+          >
+            <img src="./pic/dianziqin_transparent.png" alt="电子琴" draggable="false" />
+          </figure>
+
+          <figure
+            class="instrument instrument-drum"
+            data-id="drum"
+            data-name="架子鼓"
+            data-x="27.9"
+            data-y="55.5"
+            data-size="20.2"
+            data-influence="1.18"
+            data-force="1.16"
+          >
+            <img src="./pic/jiazigu_transparent.png" alt="架子鼓" draggable="false" />
+          </figure>
+
+          <figure
+            class="instrument instrument-guitar"
+            data-id="guitar"
+            data-name="吉他"
+            data-x="72.3"
+            data-y="48.5"
+            data-size="18.7"
+            data-influence="1"
+            data-force="1"
+          >
+            <img src="./pic/guitar_transparent.png" alt="吉他" draggable="false" />
+          </figure>
+        </section>
+
+        <section
+          class="scene scene--score"
+          id="score-scene"
+          aria-label="琴谱展示页"
+        >
+          <div class="scene-overlay scene-overlay--score" aria-hidden="true"></div>
+
+          <figure
+            class="score-sheet"
+            id="score-sheet"
+            aria-label="可交互的粒子琴谱"
+          >
+            <img
+              id="score-sheet-image"
+              src="./pic/score-transparent.png"
+              alt="琴谱"
+              draggable="false"
+            />
+            <canvas
+              class="score-particle-canvas"
+              id="score-particle-canvas"
+              aria-hidden="true"
+            ></canvas>
+          </figure>
+        </section>
+      </div>
     </main>
+
+    <nav class="page-nav is-hidden" aria-label="页面切换" aria-hidden="true">
+      <button
+        class="page-nav__button"
+        id="page-prev"
+        type="button"
+      >
+        上一页
+      </button>
+      <div class="page-nav__status" aria-live="polite">
+        <span id="page-current">1</span>
+        <span>/</span>
+        <span id="page-total">2</span>
+      </div>
+      <button
+        class="page-nav__button"
+        id="page-next"
+        type="button"
+      >
+        下一页
+      </button>
+    </nav>
+
+    <aside
+      class="tracking-preview is-hidden"
+      id="tracking-preview"
+      aria-label="手部识别预览"
+      aria-hidden="true"
+    >
+      <video
+        class="tracking-preview__video"
+        id="tracking-preview-video"
+        autoplay
+        muted
+        playsinline
+      ></video>
+      <canvas
+        class="tracking-preview__overlay"
+        id="tracking-preview-overlay"
+        aria-hidden="true"
+      ></canvas>
+    </aside>
 
     <script type="module" src="./main.js"></script>
   </body>

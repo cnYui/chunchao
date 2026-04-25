@@ -6,6 +6,15 @@
 
 - 鼠标接近乐器时触发斥力位移
 - 浏览器摄像头 + MediaPipe 手部识别驱动同样的接近效果
+- 左下角前后翻页，在互动页和谱面页之间切换
+- 第 2 页可拖拽和调试琴谱位置，并复制当前参数
+
+当前默认前端入口已临时切换为视频时间轴模式：
+
+- 默认播放 `video/33bf26e484a3a504099f10ecbd2e8c13.mp4`
+- 底部进度条支持鼠标点击跳转
+- 视频在 `42s` 插入 `bg2` 交互，在 `52s` 插入 `bg1` 交互
+- 每个交互页面右上角都有“继续”按钮，点击后恢复下一段视频播放
 
 ## 当前能力
 
@@ -24,6 +33,7 @@
 ├─ styles.css
 ├─ main.js
 ├─ pic/
+├─ video/
 └─ docs/ai/context/
 ```
 
@@ -33,6 +43,7 @@
 - `styles.css`：场景布局和视觉表现
 - `main.js`：输入源、手部识别接入和乐器运动逻辑
 - `pic/`：背景图和乐器素材
+- `video/`：视频素材
 - `docs/ai/context/`：项目上下文和设计记录
 
 ## 本地运行
@@ -57,7 +68,10 @@ http://localhost:8000
 
 ## 当前素材
 
-- 背景：`pic/4dcd07b5b33883143ace14dcf31a1e17.png`
+- 当前背景：`pic/bg1.png`
+- 备用背景：`pic/bg2.png`
+- 当前谱面图：`pic/score-transparent.png`
+- 当前视频素材：`video/33bf26e484a3a504099f10ecbd2e8c13.mp4`
 - 乐器透明图：`pic/violin_transparent.png`
 - 乐器透明图：`pic/shuqin_transparent.png`
 - 乐器透明图：`pic/dianziqin_transparent.png`
