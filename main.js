@@ -17,7 +17,9 @@ const pagePrevButton = document.querySelector("#page-prev");
 const pageNextButton = document.querySelector("#page-next");
 const pageCurrent = document.querySelector("#page-current");
 const pageTotal = document.querySelector("#page-total");
+const musicArtboard = document.querySelector("#music-artboard");
 const scoreSheet = document.querySelector("#score-sheet");
+const scoreArtboard = document.querySelector("#score-artboard");
 const scoreSheetImage = document.querySelector("#score-sheet-image");
 const scoreParticleCanvas = document.querySelector("#score-particle-canvas");
 const scoreParticleContext = scoreParticleCanvas.getContext("2d");
@@ -60,7 +62,7 @@ const physics = {
 };
 
 const scoreParticleConfig = {
-  sampleStep: 4,
+  sampleStep: 2,
   alphaThreshold: 22,
   darknessThreshold: 0.08,
   interactionRadius: 88,
@@ -69,6 +71,7 @@ const scoreParticleConfig = {
   spring: 0.085,
   damping: 0.88,
   maxSpeed: 26,
+  maxCanvasScale: 2,
   touchLandmarkIndices: [0, 4, 8, 12, 16, 20],
 };
 
@@ -145,27 +148,65 @@ const defaultScoreState = {
 };
 
 const scoreState = { ...defaultScoreState };
+const scoreLayoutConfig = {
+  artboardWidth: 1682,
+  artboardHeight: 2528,
+  legacyStageWidth: 1774,
+  legacyStageHeight: 887,
+};
+const createScoreParticleSprite = () => {
+  const spriteSize = 48;
+  const spriteCanvas = document.createElement("canvas");
+  spriteCanvas.width = spriteSize;
+  spriteCanvas.height = spriteSize;
+
+  const spriteContext = spriteCanvas.getContext("2d");
+  if (!spriteContext) {
+    return spriteCanvas;
+  }
+
+  const center = spriteSize / 2;
+  const gradient = spriteContext.createRadialGradient(
+    center,
+    center,
+    spriteSize * 0.08,
+    center,
+    center,
+    center,
+  );
+
+  gradient.addColorStop(0, "rgba(5, 5, 5, 1)");
+  gradient.addColorStop(0.58, "rgba(5, 5, 5, 0.96)");
+  gradient.addColorStop(1, "rgba(5, 5, 5, 0)");
+
+  spriteContext.fillStyle = gradient;
+  spriteContext.fillRect(0, 0, spriteSize, spriteSize);
+
+  return spriteCanvas;
+};
 const scoreParticleState = {
   particles: [],
   ready: false,
   layoutWidth: 0,
   layoutHeight: 0,
+  pixelRatio: 1,
   sourceCanvas: document.createElement("canvas"),
   sourceContext: null,
+  spriteCanvas: createScoreParticleSprite(),
 };
 const videoSegments = [
   {
-    src: "./video/33bf26e484a3a504099f10ecbd2e8c13_part1.mp4",
+    src: "./video/33bf26e484a3a504099f10ecbd2e8c13_part1.mp4?v=20260425-opt3",
     interactionIndex: 0,
     id: "video-part-1",
   },
   {
-    src: "./video/33bf26e484a3a504099f10ecbd2e8c13_part2.mp4",
+    src: "./video/33bf26e484a3a504099f10ecbd2e8c13_part2.mp4?v=20260425-opt3",
     interactionIndex: 1,
     id: "video-part-2",
   },
   {
-    src: "./video/33bf26e484a3a504099f10ecbd2e8c13_part3.mp4",
+    src: "./video/33bf26e484a3a504099f10ecbd2e8c13_part3.mp4?v=20260425-opt3",
     interactionIndex: null,
     id: "video-part-3",
   },
@@ -184,6 +225,12 @@ const timelineState = {
   activeInteractionIndex: null,
   currentSegmentIndex: 0,
 };
+
+const legacyScoreArtboardWidthRatio =
+  (scoreLayoutConfig.legacyStageHeight *
+    (scoreLayoutConfig.artboardWidth / scoreLayoutConfig.artboardHeight)) /
+  scoreLayoutConfig.legacyStageWidth;
+const legacyScoreArtboardLeftRatio = (1 - legacyScoreArtboardWidthRatio) * 0.5;
 
 let currentPageIndex = 0;
 let sceneRect = sceneStage.getBoundingClientRect();
@@ -380,6 +427,11 @@ const setupVideoPlayer = () => {
 };
 
 const measureScene = () => {
+  if (currentPageIndex === 0 && musicArtboard) {
+    sceneRect = musicArtboard.getBoundingClientRect();
+    return;
+  }
+
   sceneRect = sceneStage.getBoundingClientRect();
 };
 
@@ -388,6 +440,19 @@ scoreParticleState.sourceContext = scoreParticleState.sourceCanvas.getContext("2
 });
 
 const updatePointer = (event) => {
+  if (
+    currentPageIndex === 0 &&
+    (
+      event.clientX < sceneRect.left ||
+      event.clientX > sceneRect.right ||
+      event.clientY < sceneRect.top ||
+      event.clientY > sceneRect.bottom
+    )
+  ) {
+    pointerSource.active = false;
+    return;
+  }
+
   pointerSource.active = true;
   pointerSource.x = clamp((event.clientX - sceneRect.left) / sceneRect.width, 0, 1);
   pointerSource.y = clamp((event.clientY - sceneRect.top) / sceneRect.height, 0, 1);
@@ -411,33 +476,52 @@ const getActiveInteractionSource = (currentTime) => {
 };
 
 const applyScoreState = () => {
-  scoreSheet.style.setProperty("--score-x", `${scoreState.x}%`);
+  const visibleWidthRatio = (scoreState.width / 100) * scoreState.scale;
+  const visibleHeightRatio = (scoreState.height / 100) * scoreState.scale;
+  const mappedX =
+    ((scoreState.x / 100 - legacyScoreArtboardLeftRatio) / legacyScoreArtboardWidthRatio) * 100;
+  const mappedWidth = (visibleWidthRatio / legacyScoreArtboardWidthRatio) * 100;
+
+  scoreSheet.style.setProperty("--score-x", `${mappedX}%`);
   scoreSheet.style.setProperty("--score-y", `${scoreState.y}%`);
-  scoreSheet.style.setProperty("--score-width", `${scoreState.width}%`);
-  scoreSheet.style.setProperty("--score-height", `${scoreState.height}%`);
-  scoreSheet.style.setProperty("--score-scale", String(scoreState.scale));
+  scoreSheet.style.setProperty("--score-width", `${mappedWidth}%`);
+  scoreSheet.style.setProperty("--score-height", `${visibleHeightRatio * 100}%`);
 };
 
 const resizeScoreParticleCanvas = () => {
+  if (!scoreArtboard) {
+    return { width: 0, height: 0 };
+  }
+
   const width = Math.round(scoreSheet.clientWidth);
   const height = Math.round(scoreSheet.clientHeight);
+  const pixelRatio = Math.min(window.devicePixelRatio || 1, scoreParticleConfig.maxCanvasScale);
 
   if (width <= 0 || height <= 0) {
     scoreParticleState.layoutWidth = 0;
     scoreParticleState.layoutHeight = 0;
+    scoreParticleState.pixelRatio = 1;
     return { width: 0, height: 0 };
   }
 
-  if (scoreParticleCanvas.width !== width) {
-    scoreParticleCanvas.width = width;
+  const bufferWidth = Math.max(1, Math.round(width * pixelRatio));
+  const bufferHeight = Math.max(1, Math.round(height * pixelRatio));
+
+  if (scoreParticleCanvas.width !== bufferWidth) {
+    scoreParticleCanvas.width = bufferWidth;
   }
 
-  if (scoreParticleCanvas.height !== height) {
-    scoreParticleCanvas.height = height;
+  if (scoreParticleCanvas.height !== bufferHeight) {
+    scoreParticleCanvas.height = bufferHeight;
   }
+
+  scoreParticleContext.setTransform(1, 0, 0, 1, 0, 0);
+  scoreParticleContext.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  scoreParticleContext.imageSmoothingEnabled = true;
 
   scoreParticleState.layoutWidth = width;
   scoreParticleState.layoutHeight = height;
+  scoreParticleState.pixelRatio = pixelRatio;
 
   return { width, height };
 };
@@ -459,6 +543,7 @@ const rebuildScoreParticles = () => {
 
   scoreParticleState.sourceCanvas.width = width;
   scoreParticleState.sourceCanvas.height = height;
+  scoreParticleState.sourceContext.imageSmoothingEnabled = true;
   scoreParticleState.sourceContext.clearRect(0, 0, width, height);
   scoreParticleState.sourceContext.drawImage(scoreSheetImage, 0, 0, width, height);
 
@@ -496,8 +581,8 @@ const rebuildScoreParticles = () => {
       ) {
         const particleX = Math.min(width, x + step * 0.5);
         const particleY = Math.min(height, y + step * 0.5);
-        const alpha = 0.18 + (strongestAlpha / 255) * 0.82;
-        const size = Math.max(1.2, step * (0.42 + strongestDarkness * 0.66));
+        const alpha = 0.16 + (strongestAlpha / 255) * 0.84;
+        const size = Math.max(0.85, step * (0.22 + strongestDarkness * 0.42));
 
         particles.push({
           x: particleX,
@@ -596,6 +681,7 @@ const updateScoreParticles = (delta) => {
   const damping = Math.pow(scoreParticleConfig.damping, delta);
 
   scoreParticleContext.clearRect(0, 0, width, height);
+  scoreParticleContext.fillStyle = "#050505";
 
   for (const particle of scoreParticleState.particles) {
     for (const touchPoint of interactionPoints) {
@@ -631,12 +717,12 @@ const updateScoreParticles = (delta) => {
     particle.y += particle.velocityY * delta;
 
     scoreParticleContext.globalAlpha = particle.alpha;
-    scoreParticleContext.fillStyle = "#050505";
-    scoreParticleContext.fillRect(
-      particle.x - particle.size * 0.5,
-      particle.y - particle.size * 0.5,
-      particle.size,
-      particle.size,
+    scoreParticleContext.drawImage(
+      scoreParticleState.spriteCanvas,
+      particle.x - particle.size,
+      particle.y - particle.size,
+      particle.size * 2,
+      particle.size * 2,
     );
   }
 
