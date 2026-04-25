@@ -17,6 +17,12 @@ const pagePrevButton = document.querySelector("#page-prev");
 const pageNextButton = document.querySelector("#page-next");
 const pageCurrent = document.querySelector("#page-current");
 const pageTotal = document.querySelector("#page-total");
+const musicTuner = document.querySelector("#music-tuner");
+const musicTunerToggle = document.querySelector("#music-tuner-toggle");
+const musicTunerPanel = document.querySelector("#music-tuner-panel");
+const scoreTuner = document.querySelector("#score-tuner");
+const scoreTunerToggle = document.querySelector("#score-tuner-toggle");
+const scoreTunerPanel = document.querySelector("#score-tuner-panel");
 const musicArtboard = document.querySelector("#music-artboard");
 const scoreSheet = document.querySelector("#score-sheet");
 const scoreArtboard = document.querySelector("#score-artboard");
@@ -30,6 +36,30 @@ const trackingPreviewContext = trackingPreviewOverlay.getContext("2d");
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const smoothStep = (current, target, alpha) => current + (target - current) * alpha;
+const getStepPrecision = (step) => {
+  const stepText = String(step ?? 1);
+  const decimalPart = stepText.split(".")[1];
+  return decimalPart ? decimalPart.length : 0;
+};
+const formatControlValue = (value, step = 1) => {
+  const precision = getStepPrecision(step);
+  return precision > 0 ? value.toFixed(precision) : String(Math.round(value));
+};
+const normalizeControlValue = (value, control) => {
+  const step = Number(control.step ?? 1);
+  const min = Number(control.min ?? Number.NEGATIVE_INFINITY);
+  const max = Number(control.max ?? Number.POSITIVE_INFINITY);
+  const precision = getStepPrecision(step);
+  const clamped = clamp(value, min, max);
+  const stepped = step > 0 ? Math.round(clamped / step) * step : clamped;
+
+  return precision > 0 ? Number(stepped.toFixed(precision)) : Math.round(stepped);
+};
+const pickControlValues = (source, controls) => {
+  return Object.fromEntries(
+    controls.map((control) => [control.key, normalizeControlValue(source[control.key], control)]),
+  );
+};
 
 const pointerSource = {
   active: false,
@@ -51,7 +81,7 @@ const handSource = {
   timestamp: 0,
 };
 
-const physics = {
+const defaultPhysics = {
   radiusBase: 0.4,
   sizeScale: 2,
   impulse: 0.25,
@@ -60,11 +90,15 @@ const physics = {
   xLimit: 0.32,
   yLimit: 0.36,
 };
+const physics = { ...defaultPhysics };
 
-const scoreParticleConfig = {
+const defaultScoreParticleConfig = {
   sampleStep: 2,
   alphaThreshold: 22,
   darknessThreshold: 0.08,
+  minParticleSize: 0.85,
+  particleSizeBase: 0.22,
+  particleSizeDarknessScale: 0.42,
   interactionRadius: 88,
   repelStrength: 14,
   swirlStrength: 3.2,
@@ -74,6 +108,7 @@ const scoreParticleConfig = {
   maxCanvasScale: 2,
   touchLandmarkIndices: [0, 4, 8, 12, 16, 20],
 };
+const scoreParticleConfig = { ...defaultScoreParticleConfig };
 
 const handConnections = [
   [0, 1], [1, 2], [2, 3], [3, 4],
@@ -259,6 +294,239 @@ const instruments = instrumentElements.map((element) => {
     velocityY: 0,
   };
 });
+
+const musicTuningControls = [
+  { key: "radiusBase", label: "基础触发半径", min: 0.1, max: 1.2, step: 0.01 },
+  { key: "sizeScale", label: "尺寸半径增益", min: 0.4, max: 4, step: 0.05 },
+  { key: "impulse", label: "排斥力度", min: 0.05, max: 0.8, step: 0.01 },
+  { key: "spring", label: "回弹力度", min: 0.01, max: 0.2, step: 0.005 },
+  { key: "damping", label: "阻尼", min: 0.6, max: 0.99, step: 0.01 },
+  { key: "xLimit", label: "横向位移上限", min: 0.05, max: 0.8, step: 0.01 },
+  { key: "yLimit", label: "纵向位移上限", min: 0.05, max: 0.8, step: 0.01 },
+];
+
+const scoreTuningControls = [
+  { key: "sampleStep", label: "采样步长", min: 1, max: 6, step: 1 },
+  { key: "alphaThreshold", label: "透明阈值", min: 0, max: 80, step: 1 },
+  { key: "darknessThreshold", label: "暗部阈值", min: 0, max: 0.4, step: 0.01 },
+  { key: "minParticleSize", label: "最小粒子尺寸", min: 0.2, max: 4, step: 0.05 },
+  { key: "particleSizeBase", label: "粒子基础倍率", min: 0.05, max: 1.2, step: 0.01 },
+  { key: "particleSizeDarknessScale", label: "暗部尺寸增益", min: 0.05, max: 1.5, step: 0.01 },
+  { key: "interactionRadius", label: "交互半径", min: 20, max: 220, step: 1 },
+  { key: "repelStrength", label: "排斥强度", min: 0, max: 40, step: 0.5 },
+  { key: "swirlStrength", label: "旋涡强度", min: 0, max: 10, step: 0.1 },
+  { key: "spring", label: "回弹力度", min: 0.01, max: 0.3, step: 0.005 },
+  { key: "damping", label: "阻尼", min: 0.5, max: 0.99, step: 0.01 },
+  { key: "maxSpeed", label: "最大速度", min: 1, max: 60, step: 1 },
+];
+
+const copyText = async (text) => {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (error) {
+    const fallback = document.createElement("textarea");
+    fallback.value = text;
+    fallback.setAttribute("readonly", "");
+    fallback.style.position = "fixed";
+    fallback.style.opacity = "0";
+    document.body.append(fallback);
+    fallback.select();
+
+    try {
+      const success = document.execCommand("copy");
+      fallback.remove();
+      return success;
+    } catch (fallbackError) {
+      console.warn("复制调参配置失败。", fallbackError);
+      fallback.remove();
+      return false;
+    }
+  }
+};
+
+const setupTuningPanel = ({
+  root,
+  toggle,
+  panel,
+  title,
+  description,
+  controls,
+  source,
+  defaults,
+  onChange,
+  getPayload,
+}) => {
+  if (!root || !toggle || !panel) {
+    return;
+  }
+
+  const inputs = new Map();
+  let statusTimer = 0;
+
+  const titleElement = document.createElement("h3");
+  titleElement.className = "scene-tuner__title";
+  titleElement.textContent = title;
+
+  const descriptionElement = document.createElement("p");
+  descriptionElement.className = "scene-tuner__description";
+  descriptionElement.textContent = description;
+
+  const grid = document.createElement("div");
+  grid.className = "scene-tuner__grid";
+  const output = document.createElement("textarea");
+  output.className = "scene-tuner__output";
+  output.readOnly = true;
+
+  const setStatus = (message) => {
+    status.textContent = message;
+
+    if (statusTimer) {
+      window.clearTimeout(statusTimer);
+    }
+
+    if (message) {
+      statusTimer = window.setTimeout(() => {
+        status.textContent = "";
+      }, 2600);
+    }
+  };
+
+  const syncInputs = () => {
+    controls.forEach((control) => {
+      const input = inputs.get(control.key);
+      if (!input) {
+        return;
+      }
+
+      input.value = formatControlValue(source[control.key], control.step);
+    });
+  };
+  const syncOutput = () => {
+    output.value = JSON.stringify(getPayload(), null, 2);
+  };
+
+  controls.forEach((control) => {
+    const field = document.createElement("label");
+    field.className = "scene-tuner__field";
+
+    const labelRow = document.createElement("span");
+    labelRow.className = "scene-tuner__field-label";
+
+    const labelText = document.createElement("span");
+    labelText.textContent = control.label;
+
+    const labelNote = document.createElement("span");
+    labelNote.className = "scene-tuner__field-note";
+    labelNote.textContent = `${control.min} - ${control.max}`;
+
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = String(control.min);
+    input.max = String(control.max);
+    input.step = String(control.step);
+    input.value = formatControlValue(source[control.key], control.step);
+
+    const updateValue = (commit = false) => {
+      if (input.value === "") {
+        return;
+      }
+
+      const nextValue = Number.parseFloat(input.value);
+      if (!Number.isFinite(nextValue)) {
+        return;
+      }
+
+      const normalized = normalizeControlValue(nextValue, control);
+      source[control.key] = normalized;
+      onChange?.(control.key, normalized);
+      syncOutput();
+
+      if (commit) {
+        input.value = formatControlValue(normalized, control.step);
+      }
+    };
+
+    input.addEventListener("input", () => {
+      updateValue(false);
+    });
+    input.addEventListener("change", () => {
+      updateValue(true);
+    });
+    input.addEventListener("blur", () => {
+      input.value = formatControlValue(source[control.key], control.step);
+    });
+
+    labelRow.append(labelText, labelNote);
+    field.append(labelRow, input);
+    grid.append(field);
+    inputs.set(control.key, input);
+  });
+
+  const actions = document.createElement("div");
+  actions.className = "scene-tuner__actions";
+
+  const copyButton = document.createElement("button");
+  copyButton.type = "button";
+  copyButton.className = "scene-tuner__action";
+  copyButton.textContent = "复制参数";
+  copyButton.addEventListener("click", async () => {
+    syncOutput();
+    const copied = await copyText(output.value);
+    setStatus(copied ? "已复制当前参数，直接发给我就行。" : "复制失败了，下面的 JSON 可以直接手动复制。");
+  });
+
+  const resetButton = document.createElement("button");
+  resetButton.type = "button";
+  resetButton.className = "scene-tuner__action";
+  resetButton.textContent = "重置";
+  resetButton.addEventListener("click", () => {
+    controls.forEach((control) => {
+      source[control.key] = defaults[control.key];
+    });
+    onChange?.();
+    syncInputs();
+    syncOutput();
+    setStatus("已恢复默认参数。");
+  });
+
+  actions.append(copyButton, resetButton);
+
+  const hint = document.createElement("p");
+  hint.className = "scene-tuner__hint";
+  hint.textContent = "改完点“复制参数”，把 JSON 发给我，我再按它回写成正式版本。";
+
+  const status = document.createElement("p");
+  status.className = "scene-tuner__status";
+  status.setAttribute("aria-live", "polite");
+
+  syncOutput();
+  panel.append(titleElement, descriptionElement, grid, actions, hint, output, status);
+
+  const setOpen = (open) => {
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    panel.hidden = !open;
+    if (open) {
+      syncInputs();
+      syncOutput();
+    }
+  };
+
+  setOpen(false);
+
+  toggle.addEventListener("click", () => {
+    setOpen(panel.hidden);
+  });
+
+  ["click", "pointerdown", "pointermove", "keydown"].forEach((eventName) => {
+    root.addEventListener(eventName, (event) => {
+      event.stopPropagation();
+      if (eventName !== "keydown") {
+        pointerSource.active = false;
+      }
+    });
+  });
+};
 
 const syncVideoSkipUi = () => {
   if (!videoActions) {
@@ -582,7 +850,14 @@ const rebuildScoreParticles = () => {
         const particleX = Math.min(width, x + step * 0.5);
         const particleY = Math.min(height, y + step * 0.5);
         const alpha = 0.16 + (strongestAlpha / 255) * 0.84;
-        const size = Math.max(0.85, step * (0.22 + strongestDarkness * 0.42));
+        const size = Math.max(
+          scoreParticleConfig.minParticleSize,
+          step *
+            (
+              scoreParticleConfig.particleSizeBase +
+              strongestDarkness * scoreParticleConfig.particleSizeDarknessScale
+            ),
+        );
 
         particles.push({
           x: particleX,
@@ -728,6 +1003,39 @@ const updateScoreParticles = (delta) => {
 
   scoreParticleContext.globalAlpha = 1;
 };
+
+setupTuningPanel({
+  root: musicTuner,
+  toggle: musicTunerToggle,
+  panel: musicTunerPanel,
+  title: "乐器页调参",
+  description: "这里调的是乐器排斥和回弹手感，复制后把 JSON 发给我即可。",
+  controls: musicTuningControls,
+  source: physics,
+  defaults: defaultPhysics,
+  getPayload: () => ({
+    page: "music",
+    physics: pickControlValues(physics, musicTuningControls),
+  }),
+});
+
+setupTuningPanel({
+  root: scoreTuner,
+  toggle: scoreTunerToggle,
+  panel: scoreTunerPanel,
+  title: "琴谱页调参",
+  description: "这里可以同时调粒子密度、粒子大小和排斥回弹效果。",
+  controls: scoreTuningControls,
+  source: scoreParticleConfig,
+  defaults: defaultScoreParticleConfig,
+  onChange: () => {
+    rebuildScoreParticles();
+  },
+  getPayload: () => ({
+    page: "score",
+    scoreParticleConfig: pickControlValues(scoreParticleConfig, scoreTuningControls),
+  }),
+});
 
 const setPage = (nextIndex) => {
   const targetIndex = clamp(nextIndex, 0, scenes.length - 1);

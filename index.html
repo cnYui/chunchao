@@ -7,7 +7,7 @@
       content="width=device-width, initial-scale=1.0"
     />
     <title>春潮乐器场景</title>
-    <link rel="stylesheet" href="./styles.css?v=20260425-opt3" />
+    <link rel="stylesheet" href="./styles.css?v=20260425-tuner1" />
   </head>
   <body data-front-mode="video-timeline">
     <main class="page-shell">
@@ -61,6 +61,23 @@
           id="scene"
           aria-label="可交互的排练室乐器场景"
         >
+          <div class="scene-tuner" id="music-tuner">
+            <button
+              class="scene-tuner__toggle"
+              id="music-tuner-toggle"
+              type="button"
+              aria-expanded="false"
+              aria-controls="music-tuner-panel"
+            >
+              调参
+            </button>
+            <div
+              class="scene-tuner__panel"
+              id="music-tuner-panel"
+              hidden
+            ></div>
+          </div>
+
           <div class="music-artboard" id="music-artboard">
             <div class="scene-overlay" aria-hidden="true"></div>
 
@@ -136,6 +153,23 @@
           id="score-scene"
           aria-label="琴谱展示页"
         >
+          <div class="scene-tuner" id="score-tuner">
+            <button
+              class="scene-tuner__toggle"
+              id="score-tuner-toggle"
+              type="button"
+              aria-expanded="false"
+              aria-controls="score-tuner-panel"
+            >
+              调参
+            </button>
+            <div
+              class="scene-tuner__panel"
+              id="score-tuner-panel"
+              hidden
+            ></div>
+          </div>
+
           <div class="score-artboard" id="score-artboard">
             <div class="scene-overlay scene-overlay--score" aria-hidden="true"></div>
 
@@ -203,6 +237,6 @@
       ></canvas>
     </aside>
 
-    <script type="module" src="./main.js?v=20260425-newclips2"></script>
+    <script type="module" src="./main.js?v=20260425-tuner1"></script>
   </body>
 </html>
