@@ -36,8 +36,8 @@
 
 ## 已确认默认排斥参数
 
-- `radiusBase=0.4`
-- `sizeScale=2`
+- `radiusBase=0.15`
+- `sizeScale=1.5`
 - `impulse=0.25`
 - `spring=0.04`
 - `damping=0.95`

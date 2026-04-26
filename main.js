@@ -87,8 +87,8 @@ const handSource = {
 };
 
 const defaultPhysics = {
-  radiusBase: 0.4,
-  sizeScale: 2,
+  radiusBase: 0.15,
+  sizeScale: 1.5,
   impulse: 0.25,
   spring: 0.04,
   damping: 0.95,
@@ -104,8 +104,8 @@ const defaultScoreParticleConfig = {
   minParticleSize: 0.75,
   particleSizeBase: 0.22,
   particleSizeDarknessScale: 0.42,
-  interactionRadius: 20,
-  repelStrength: 5,
+  interactionRadius: 80,
+  repelStrength: 5.5,
   swirlStrength: 3.2,
   spring: 0.105,
   damping: 0.82,

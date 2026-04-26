@@ -39,6 +39,21 @@
 - 推开过程中加入少量切向扰动，让散开更像“碎粒飞散”，而不是僵硬直线位移
 - 没有触碰时，粒子通过弹簧回拉和阻尼回到原位
 
+## 当前固化参数
+
+- `sampleStep=1`
+- `alphaThreshold=22`
+- `darknessThreshold=0.39`
+- `minParticleSize=0.75`
+- `particleSizeBase=0.22`
+- `particleSizeDarknessScale=0.42`
+- `interactionRadius=80`
+- `repelStrength=5.5`
+- `swirlStrength=3.2`
+- `spring=0.105`
+- `damping=0.82`
+- `maxSpeed=26`
+
 ## 取舍
 
 - 没有引入 WebGL 或额外粒子库，继续保持纯静态页面方案

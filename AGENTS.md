@@ -65,6 +65,7 @@
 - 当前桌面投影现场验证基线已确认：一次标定后进入运行态，方块放入 `300-500ms` 内开始发声，移开 `300-500ms` 内停止发声，手部可调节 `VIBE / VOL / REV / POS`
 - 当前桌面投影 ROI 只在四点标定和窗口尺寸变化后重算，运行循环不再每帧重算，原因是要避免 pad 激活视觉反向污染检测几何
 - 当前桌面投影 ROI 特征采样使用四边形 mask 统计透视 ROI 内部像素，暂不做完整透视 warp，原因是第一版先解决包围盒串格误判
+- 当前乐器页默认排斥参数已更新为 `radiusBase=0.15`、`sizeScale=1.5`、`impulse=0.25`、`spring=0.04`、`damping=0.95`、`xLimit=0.32`、`yLimit=0.36`
 
 ## 素材处理记忆
 
@@ -100,7 +101,7 @@
 - 第 2 页原先残留的拖拽谱面逻辑已移除，避免和粒子触碰效果冲突
 - 第 2 页当前保留鼠标移动和点击作为粒子触碰后备输入，原因是现场调试时不一定每次都先开摄像头
 - 第 2 页当前默认琴谱参数已更新为 `x=47.8`、`y=32.2`、`width=83`、`height=140.1`、`scale=0.53`、`stretchX=1.06`、`stretchY=0.81`
-- 第 2 页当前默认粒子参数已更新为 `sampleStep=1`、`alphaThreshold=22`、`darknessThreshold=0.39`、`minParticleSize=0.75`、`particleSizeBase=0.22`、`particleSizeDarknessScale=0.42`、`interactionRadius=20`、`repelStrength=5`、`swirlStrength=3.2`、`spring=0.105`、`damping=0.82`、`maxSpeed=26`
+- 第 2 页当前默认粒子参数已更新为 `sampleStep=1`、`alphaThreshold=22`、`darknessThreshold=0.39`、`minParticleSize=0.75`、`particleSizeBase=0.22`、`particleSizeDarknessScale=0.42`、`interactionRadius=80`、`repelStrength=5.5`、`swirlStrength=3.2`、`spring=0.105`、`damping=0.82`、`maxSpeed=26`
 - 第 2 页当前面板已恢复粒子参数调节，并新增“只上下拉伸”和“只左右拉伸”两个独立控制
 - 第 2 页琴谱容器当前需保持在谱面交互内容最上层，但不覆盖右上角“继续”按钮
 - 当前时间轴模式下，谱面粒子必须在交互页真正显示后再重建一次，原因是隐藏态尺寸为 `0`，否则首次进入会看起来像未显示
