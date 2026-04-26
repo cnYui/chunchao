@@ -479,6 +479,17 @@
             <!-- Left Controls Panel -->
             <div class="w-[30%] flex flex-col gap-3 flex-shrink-0">
 
+                <!-- Camera Monitor -->
+                <div id="camera-monitor-panel" class="stage-panel rounded-lg overflow-hidden relative" style="min-height: 148px; height: 31%;">
+                    <div class="stage-screen-base absolute inset-0 opacity-70"></div>
+                    <div class="stage-screen-grid absolute inset-0 opacity-35"></div>
+                    <div class="absolute top-2 left-3 z-10 font-label-sm tracking-widest uppercase opacity-70 text-[9px]">CAM PREVIEW</div>
+                    <div class="absolute top-2 right-3 z-10 font-label-sm tracking-widest uppercase opacity-55 text-[9px]">CALIBRATE</div>
+                    <div id="synth-calibration-layer" class="pointer-events-none absolute inset-0 z-20"></div>
+                    <canvas id="synth-debug-canvas" class="pointer-events-none absolute inset-0 z-30"></canvas>
+                    <video id="synth-camera-preview" class="hidden" playsinline muted></video>
+                </div>
+
                 <!-- Upper Section: Vibe Knob (full width) -->
                 <div class="stage-panel rounded-lg p-4 flex flex-col items-center justify-center gap-2" style="min-height: 140px;">
                     <div class="font-label-sm text-on-surface-variant uppercase tracking-wider text-[9px]">VIBE</div>
@@ -569,10 +580,6 @@
         </div>
         <div class="screw"></div>
     </div>
-
-    <div id="synth-calibration-layer" class="pointer-events-none absolute inset-0 z-20"></div>
-    <canvas id="synth-debug-canvas" class="pointer-events-none absolute inset-0 z-30"></canvas>
-    <video id="synth-camera-preview" class="hidden" playsinline muted></video>
 </div>
 
 <script type="module" src="./synth/app.js?v=20260426-projection-runtime"></script>

@@ -1,8 +1,8 @@
 import {
-  createAudioEngine,
-  createBrowserAudioSystem,
   defaultControlState,
+  getVibeIndexFromAngle,
 } from './audio-engine.js';
+import { createBrowserStrudelRuntime } from './strudel-browser.js';
 import { createCameraController } from './camera-controller.js';
 import { createDebugOverlay } from './debug-overlay.js';
 import { createHandController } from './hand-controller.js';
@@ -10,29 +10,52 @@ import { createHandBounds, mapPointToKnobAngle, mapPointToSliderValue } from './
 import { createOccupancyDetector } from './occupancy-detector.js';
 import { createProjectiveTransform, mapDomRectToQuad } from './projection-calibration.js';
 import { computeMaskedFeatureFromImageData, getQuadBounds } from './roi-sampling.js';
-import { strudelPadFrequencies, strudelPadSounds } from './sound-presets.js';
+import { getGridCellPatternKey, gridPatternKeys } from './strudel-score.js';
 import { createSynthRouter } from './synth-router.js';
 import { createUiControls } from './ui-controls.js';
 
-const frequencies = strudelPadFrequencies;
+const padCount = gridPatternKeys.length;
 
 const calibrationOrder = ['左上', '右上', '右下', '左下'];
 const sliderKeys = ['volume', 'reverb', 'position'];
 
 const uiControls = createUiControls(document);
+const cameraMonitorPanel = document.querySelector('#camera-monitor-panel');
 const cameraPreview = document.querySelector('#synth-camera-preview');
 const debugCanvas = document.querySelector('#synth-debug-canvas');
 const calibrationLayer = document.querySelector('#synth-calibration-layer');
 
-const browserAudio = createBrowserAudioSystem({
-  initialControlState: defaultControlState,
-});
-const audioEngine = createAudioEngine({
-  frequencies,
-  padSounds: strudelPadSounds,
-  createVoiceBackend: browserAudio.createVoiceBackend,
-  initialControlState: defaultControlState,
-  onControlStateChange: browserAudio.applyControlState,
+const strudelRuntime = createBrowserStrudelRuntime();
+const strudelAdapter = {
+  startPadVoice(index) {
+    return strudelRuntime.setOccupied(index, true);
+  },
+  stopPadVoice(index) {
+    return strudelRuntime.setOccupied(index, false);
+  },
+  stopAllVoices() {
+    return Promise.all(Array.from({ length: padCount }, (_, index) => {
+      return strudelRuntime.setOccupied(index, false);
+    }));
+  },
+  setKnobAngle(angle) {
+    return strudelRuntime.setVibeByIndex(getVibeIndexFromAngle(angle));
+  },
+  setSliderValue(key, value) {
+    return strudelRuntime.setControlValue?.(key, value);
+  },
+  getActiveVoiceIds() {
+    return strudelRuntime.getState().occupied
+      .map((active, index) => (active ? index : null))
+      .filter(Number.isInteger);
+  },
+  getControlState() {
+    return strudelRuntime.getState();
+  },
+};
+const router = createSynthRouter({
+  audioEngine: strudelAdapter,
+  uiControls,
 });
 const cameraController = createCameraController({
   videoElement: cameraPreview,
@@ -42,14 +65,13 @@ const cameraController = createCameraController({
 const handController = createHandController();
 const debugOverlay = createDebugOverlay({ canvas: debugCanvas });
 const occupancyDetector = createOccupancyDetector({
-  padCount: frequencies.length,
+  padCount,
   enterFrames: 10,
   exitFrames: 8,
   enterThreshold: 18,
   exitThreshold: 8,
   maxHandOverlap: 0.38,
 });
-const router = createSynthRouter({ audioEngine, uiControls });
 
 const analysisCanvas = document.createElement('canvas');
 const analysisContext = analysisCanvas.getContext('2d', { willReadFrequently: true });
@@ -65,7 +87,7 @@ const state = {
   knobRect: null,
   sliderRects: {},
   baselineReady: false,
-  occupancyStates: Array.from({ length: frequencies.length }, () => ({
+  occupancyStates: Array.from({ length: padCount }, () => ({
     status: 'empty',
     transition: null,
   })),
@@ -167,6 +189,17 @@ const samplePadFeatures = (video, rois, handBounds) => {
   return rois.map((quad) => computeFeatureForQuad(video, quad, handBounds));
 };
 
+const buildWaveform = (now = performance.now()) => {
+  const activeCount = state.occupancyStates.filter((item) => item.status === 'occupied').length;
+
+  return Uint8Array.from({ length: 16 }, (_, index) => {
+    const base = activeCount > 0 ? 46 : 12;
+    const pulse = Math.sin(now / 180 + index * 0.65 + activeCount * 0.25);
+    const accent = activeCount * 14 + (index % 4) * 6;
+    return Math.max(8, Math.min(255, Math.round(base + accent + (pulse + 1) * 28)));
+  });
+};
+
 const setStatus = (text) => {
   state.status = text;
   if (ui.statusText) {
@@ -207,17 +240,15 @@ const updateUiState = () => {
 };
 
 const stylePreviewElements = () => {
-  const previewWidth = Math.max(220, Math.min(280, Math.round(window.innerWidth * 0.18)));
-  const previewHeight = Math.round(previewWidth * 0.5625);
+  if (!cameraMonitorPanel) {
+    return;
+  }
+
   const sharedStyle = {
     position: 'absolute',
-    right: '16px',
-    bottom: '16px',
-    width: `${previewWidth}px`,
-    height: `${previewHeight}px`,
-    inset: 'auto',
-    left: 'auto',
-    top: 'auto',
+    inset: '0',
+    width: '100%',
+    height: '100%',
     borderRadius: '10px',
   };
 
@@ -225,9 +256,9 @@ const stylePreviewElements = () => {
     zIndex: '42',
     display: state.cameraReady ? 'block' : 'none',
     objectFit: 'fill',
-    border: '1px solid rgba(255, 160, 126, 0.38)',
+    border: '0',
     background: '#050607',
-    boxShadow: '0 12px 36px rgba(0, 0, 0, 0.45)',
+    boxShadow: 'inset 0 0 0 1px rgba(255, 160, 126, 0.24)',
     cursor: state.cameraReady && state.calibrationPoints.length < 4 ? 'crosshair' : 'default',
   });
 
@@ -235,8 +266,8 @@ const stylePreviewElements = () => {
     zIndex: '43',
     display: state.debugVisible && state.cameraReady ? 'block' : 'none',
     pointerEvents: 'none',
-    border: '1px solid rgba(255, 160, 126, 0.2)',
-    boxShadow: '0 12px 36px rgba(0, 0, 0, 0.25)',
+    border: '0',
+    boxShadow: 'none',
   });
 };
 
@@ -269,7 +300,7 @@ const resetCalibration = () => {
   state.sliderRects = {};
   state.baselineReady = false;
   occupancyDetector.reset();
-  audioEngine.stopAllVoices();
+  strudelAdapter.stopAllVoices();
   state.occupancyStates = state.occupancyStates.map(() => ({
     status: 'empty',
     transition: null,
@@ -282,7 +313,7 @@ const resetCalibration = () => {
 };
 
 const captureBaseline = async () => {
-  if (!state.cameraReady || state.padRois.length !== frequencies.length) {
+  if (!state.cameraReady || state.padRois.length !== padCount) {
     return;
   }
 
@@ -377,14 +408,13 @@ const renderDebug = (handPoint = null) => {
 
 const wirePadFallback = () => {
   uiControls.getPadElements().forEach((pad, index) => {
-    const sound = strudelPadSounds[index];
-    if (sound) {
-      pad.title = sound.label;
-      pad.setAttribute('aria-label', `Pad ${index + 1} ${sound.label}`);
-    }
+    const patternKey = getGridCellPatternKey(index);
+    const label = patternKey ?? 'empty';
+    pad.title = label;
+    pad.setAttribute('aria-label', `Pad ${index + 1} ${label}`);
 
     const stop = () => {
-      audioEngine.stopPadVoice(index);
+      strudelAdapter.stopPadVoice(index);
       if (!state.baselineReady) {
         uiControls.setPadActive(index, false);
       }
@@ -392,8 +422,8 @@ const wirePadFallback = () => {
 
     pad.addEventListener('pointerdown', async (event) => {
       event.preventDefault();
-      await browserAudio.resume().catch(() => undefined);
-      audioEngine.startPadVoice(index);
+      await strudelRuntime.ensureReady().catch(() => undefined);
+      strudelAdapter.startPadVoice(index);
       if (!state.baselineReady) {
         uiControls.setPadActive(index, true);
       }
@@ -418,12 +448,12 @@ const wireSliderFallback = () => {
         y: event.clientY,
       }, rect);
       uiControls.setSliderValue(key, value);
-      audioEngine.setSliderValue(key, value);
+      strudelAdapter.setSliderValue(key, value);
     };
 
     track.addEventListener('pointerdown', async (event) => {
       event.preventDefault();
-      await browserAudio.resume().catch(() => undefined);
+      await strudelRuntime.ensureReady().catch(() => undefined);
       applyFromPointer(event);
 
       const move = (moveEvent) => applyFromPointer(moveEvent);
@@ -450,12 +480,12 @@ const wireKnobFallback = () => {
       y: event.clientY,
     }, uiControls.getKnobRect());
     uiControls.setKnobAngle(angle);
-    audioEngine.setKnobAngle(angle);
+    strudelAdapter.setKnobAngle(angle);
   };
 
   knob.addEventListener('pointerdown', async (event) => {
     event.preventDefault();
-    await browserAudio.resume().catch(() => undefined);
+    await strudelRuntime.ensureReady().catch(() => undefined);
     applyFromPointer(event);
 
     const move = (moveEvent) => applyFromPointer(moveEvent);
@@ -499,9 +529,9 @@ const startCamera = async () => {
 
 const loop = (now) => {
   if (state.cameraReady && state.handReady && cameraPreview.readyState >= 2) {
-    uiControls.setWaveform(browserAudio.getAnalyserByteData());
+    uiControls.setWaveform(buildWaveform(now));
 
-    if (state.baselineReady && state.padRois.length === frequencies.length) {
+    if (state.baselineReady && state.padRois.length === padCount) {
       const handState = handController.detect({
         video: cameraPreview,
         now,
@@ -535,8 +565,8 @@ const createControlButton = (label, action) => {
     borderRadius: '6px',
     background: 'rgba(18, 12, 14, 0.86)',
     color: '#f7d9c3',
-    padding: '6px 10px',
-    fontSize: '12px',
+    padding: '5px 9px',
+    fontSize: '11px',
     lineHeight: '1',
     cursor: 'pointer',
   });
@@ -549,42 +579,41 @@ const mountCalibrationUi = () => {
   const panel = document.createElement('div');
   Object.assign(panel.style, {
     position: 'absolute',
-    top: '16px',
-    left: '16px',
+    inset: '0',
     zIndex: '44',
-    width: 'min(320px, calc(100% - 32px))',
     display: 'flex',
     flexDirection: 'column',
-    gap: '10px',
-    padding: '12px',
+    justifyContent: 'space-between',
+    gap: '8px',
+    padding: '10px',
     borderRadius: '10px',
-    border: '1px solid rgba(255, 164, 132, 0.26)',
-    background: 'rgba(12, 9, 11, 0.78)',
-    boxShadow: '0 16px 40px rgba(0, 0, 0, 0.34)',
-    backdropFilter: 'blur(8px)',
+    background: 'linear-gradient(180deg, rgba(6, 4, 5, 0.16), rgba(6, 4, 5, 0.06) 45%, rgba(6, 4, 5, 0.22))',
     pointerEvents: 'auto',
   });
 
   ui.statusText = document.createElement('div');
   ui.statusText.textContent = state.status;
   Object.assign(ui.statusText.style, {
-    fontSize: '13px',
+    alignSelf: 'flex-start',
+    maxWidth: '72%',
+    padding: '4px 8px',
+    borderRadius: '999px',
+    border: '1px solid rgba(255, 164, 132, 0.22)',
+    background: 'rgba(9, 7, 8, 0.66)',
+    backdropFilter: 'blur(6px)',
+    fontSize: '10px',
     color: '#f7d9c3',
-    lineHeight: '1.5',
-  });
-
-  ui.hintText = document.createElement('div');
-  Object.assign(ui.hintText.style, {
-    fontSize: '12px',
-    color: 'rgba(247, 217, 195, 0.74)',
-    lineHeight: '1.4',
+    lineHeight: '1.2',
   });
 
   ui.pointRow = document.createElement('div');
   Object.assign(ui.pointRow.style, {
     display: 'flex',
-    gap: '8px',
+    gap: '6px',
     flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    alignSelf: 'flex-end',
+    maxWidth: '58%',
   });
   calibrationOrder.forEach((label, index) => {
     const chip = document.createElement('div');
@@ -593,29 +622,45 @@ const mountCalibrationUi = () => {
     Object.assign(chip.style, {
       border: '1px solid rgba(255, 164, 132, 0.22)',
       borderRadius: '999px',
-      padding: '4px 8px',
-      fontSize: '11px',
+      padding: '3px 7px',
+      fontSize: '10px',
+      lineHeight: '1',
       color: '#ffd7c1',
-      background: 'rgba(15, 10, 12, 0.72)',
+      background: 'rgba(15, 10, 12, 0.58)',
+      backdropFilter: 'blur(4px)',
       opacity: '0.42',
     });
     ui.pointRow.append(chip);
   });
 
+  const topRow = document.createElement('div');
+  Object.assign(topRow.style, {
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: '8px',
+  });
+  topRow.append(ui.statusText, ui.pointRow);
+
   const buttonRow = document.createElement('div');
   Object.assign(buttonRow.style, {
     display: 'flex',
-    gap: '8px',
+    gap: '6px',
     flexWrap: 'wrap',
+    alignSelf: 'flex-start',
+    padding: '6px',
+    borderRadius: '10px',
+    background: 'rgba(10, 8, 9, 0.68)',
+    backdropFilter: 'blur(8px)',
   });
 
-  ui.cameraButton = createControlButton('启用摄像头', 'camera');
-  ui.baselineButton = createControlButton('采集空场', 'baseline');
-  ui.resetButton = createControlButton('重置标定', 'reset');
-  ui.debugButton = createControlButton('隐藏调试', 'debug');
+  ui.cameraButton = createControlButton('开镜头', 'camera');
+  ui.baselineButton = createControlButton('空场', 'baseline');
+  ui.resetButton = createControlButton('重标定', 'reset');
+  ui.debugButton = createControlButton('调试', 'debug');
 
   buttonRow.append(ui.cameraButton, ui.baselineButton, ui.resetButton, ui.debugButton);
-  panel.append(ui.statusText, ui.hintText, ui.pointRow, buttonRow);
+  panel.append(topRow, buttonRow);
   calibrationLayer.append(panel);
 
   ui.cameraButton.addEventListener('click', () => {
@@ -645,7 +690,9 @@ const bootstrap = async () => {
   uiControls.setKnobAngle(defaultControlState.knobAngle);
   sliderKeys.forEach((key) => {
     uiControls.setSliderValue(key, defaultControlState[key]);
+    strudelAdapter.setSliderValue(key, defaultControlState[key]);
   });
+  strudelAdapter.setKnobAngle(defaultControlState.knobAngle);
   updateUiState();
   stylePreviewElements();
   wirePadFallback();
@@ -658,7 +705,7 @@ const bootstrap = async () => {
     renderDebug();
   });
   window.addEventListener('pointerdown', () => {
-    browserAudio.resume().catch(() => undefined);
+    strudelRuntime.ensureReady().catch(() => undefined);
   });
   cameraPreview.addEventListener('click', handleCalibrationClick);
 
@@ -677,13 +724,12 @@ const bootstrap = async () => {
 };
 
 window.synthRuntime = {
-  frequencies,
-  strudelPadSounds,
+  padCount,
   uiControls,
   cameraController,
   handController,
   debugOverlay,
-  audioEngine,
+  strudelRuntime,
   router,
   captureBaseline,
   resetCalibration,

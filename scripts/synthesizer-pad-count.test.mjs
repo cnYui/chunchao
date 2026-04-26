@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { strudelPadFrequencies } from '../synth/sound-presets.js';
+import { gridPatternKeys } from '../synth/strudel-score.js';
 
 const html = readFileSync(new URL('../synthesizer.html', import.meta.url), 'utf8');
 const appJsPath = new URL('../synth/app.js', import.meta.url);
@@ -35,10 +35,11 @@ test('最终合成器页面使用暗红舞台风格标记', () => {
   assert.match(html, /\bstage-panel\b/);
 });
 
-test('每个触发按钮都有对应音高', () => {
-  assert.match(appJs, /strudelPadFrequencies/);
-  assert.equal(strudelPadFrequencies.length, 16);
-  assert.ok(strudelPadFrequencies.every((frequency) => Number.isFinite(frequency)));
+test('每个触发按钮都有对应 Strudel 格子映射', () => {
+  assert.match(appJs, /createBrowserStrudelRuntime/);
+  assert.match(appJs, /getGridCellPatternKey/);
+  assert.equal(gridPatternKeys.length, 16);
+  assert.equal(gridPatternKeys[11], null);
 });
 
 test('最终展示页包含模块入口和调试层容器', () => {

@@ -50,12 +50,17 @@
 - 当前视频层右下角新增音量控件，可点击解除静音并拖动调整音量
 - 当前视频播放区右上角保留“跳过”按钮：片段 1 / 2 跳到对应交互，片段 3 跳到最终展示页 `synthesizer.html`
 - 当前最终展示页通过全屏 `iframe` 延迟加载，原因是它是独立 HTML 页面且带有自己的样式和脚本
-- 当前最终展示页 `synthesizer.html` 的触发按钮已从 `3x3` 扩展为 `4x4`，共 16 个按钮，并配套 16 个音高
+- 当前最终展示页 `synthesizer.html` 的触发按钮已从 `3x3` 扩展为 `4x4`，共 16 个按钮
 - 当前最终展示页 16 个按钮已按顺序叠加 `pic/1.png` 到 `pic/16.png`，图案使用低透明度印在按钮上
 - 当前最终展示页视觉风格已改为暗红舞台 / 旧金属控制台风格，只改元素样式，不改按钮点击和视频时间轴逻辑
-- 当前最终展示页 16 个按钮已接入 16 个 Strudel 风格音效预设，定义在 `synth/sound-presets.js`
-- 当前 16 个按钮音效顺序为 `bd / sd / hh / cp / rim / tom / perc / sub / bass / pluck / arp / acid / fm / noise / glass / pad`
-- 当前不直接引入 `@strudel/web`，原因是页面需要占格持续发声和移开停止，继续用 WebAudio 自建合成更稳定，也避免额外 runtime 与样本加载复杂度
+- 当前最终展示页已切换为真实 Strudel runtime，运行时由 `synth/strudel-browser.js` 驱动
+- 当前最终展示页已引入最小 npm 工程，使用 `Vite + @strudel/web`
+- 当前摄像头主预览已移入控制台左上角固定监视器位，不再使用右下角悬浮小窗
+- 当前标定状态与控制按钮已压缩为摄像头画面上的轻量覆盖层
+- 当前旋钮四档映射为 `warm / bright / cold / dark`
+- 当前 16 格按从左到右、从上到下映射到 Strudel pattern，其中 `(3,4)` 留空，不绑定任何循环
+- 当前 `VOL / REV / POS` 会作为全局 `gain / room / pan` 作用于最终 Strudel 组合
+- 当前 Strudel drum sample 通过 `samples('github:tidalcycles/dirt-samples')` 预加载
 - 当前最终展示页若用于桌面投影，手指调控可以用 MediaPipe Hand Landmarker；16 个实体方块占格不建议用 Hand Landmarker 判断，应使用摄像头画面中 16 个 ROI 的遮挡 / 占用检测
 - 当前桌面投影占格检测需要俯拍或斜俯拍摄像头、四点标定、空场 baseline、ROI 差分和防抖；只用笔记本前置摄像头通常不稳定
 - 当前桌面投影方案已确认：只能使用电脑内置摄像头，但现场允许将电脑倾斜，使摄像头稳定拍到整张被投影的桌面区域
@@ -116,11 +121,13 @@
 
 ## 仓库发布记忆
 
-- 当前项目已开始整理为 Git 仓库，发布时保持静态页结构，不额外引入构建链路
+- 当前项目已开始整理为 Git 仓库，整体仍以静态页为主
+- 当前项目整体仍以静态页面为主，但最终展示页因真实接入 Strudel runtime，已新增最小 npm/Vite 构建链路
 - `pic/` 下素材属于运行主资源，默认纳入版本管理
 - `video/` 下素材属于运行主资源，默认纳入版本管理
 - `.codex-logs/` 属于本地运行日志，默认加入忽略，不上传 GitHub
 - Python 运行缓存 `__pycache__/` 和 `*.pyc` 属于本地生成物，不提交到 GitHub
+- `node_modules/` 和 `dist/` 属于本地依赖与构建产物，不提交到 GitHub
 - 当前远程仓库地址为 `https://github.com/cnYui/chunchao.git`
 - 当前默认分支为 `main`，本地已与 `origin/main` 建立跟踪关系
 - `README.md` 只保留对外快速说明、运行方式和当前约束，设计推导继续沉淀到 `docs/ai/context/`
