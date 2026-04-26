@@ -7,7 +7,7 @@
       content="width=device-width, initial-scale=1.0"
     />
     <title>春潮乐器场景</title>
-    <link rel="stylesheet" href="./styles.css?v=20260425-tuner1" />
+    <link rel="stylesheet" href="./styles.css?v=20260425-final1" />
   </head>
   <body data-front-mode="video-timeline">
     <main class="page-shell">
@@ -19,7 +19,7 @@
         <video
           class="video-stage__player"
           id="reference-video"
-          src="./video/0baa12eb2ae33a003c103a1a1a269781_raw.mp4?v=20260425-newclips1"
+          src="./video/1a21117e4e7916df5b51a3864ea114a9_raw.mp4?v=20260425-newclips2"
           preload="metadata"
           autoplay
           muted
@@ -34,6 +34,41 @@
             跳过
           </button>
         </div>
+        <div class="video-volume" id="video-volume-control" aria-label="视频音量控制">
+          <button
+            class="video-volume__button"
+            id="video-volume-toggle"
+            type="button"
+            aria-pressed="false"
+          >
+            开声
+          </button>
+          <input
+            class="video-volume__range"
+            id="video-volume-range"
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value="0.7"
+            aria-label="视频音量"
+          />
+        </div>
+      </section>
+
+      <section
+        class="final-stage is-hidden"
+        id="final-stage"
+        aria-label="合成器展示页"
+        aria-hidden="true"
+      >
+        <iframe
+          class="final-stage__frame"
+          id="final-frame"
+          title="Synthesizer Console"
+          data-src="./synthesizer.html?v=20260425-final2"
+          sandbox="allow-scripts allow-same-origin"
+        ></iframe>
       </section>
 
       <div
@@ -180,7 +215,7 @@
             >
               <img
                 id="score-sheet-image"
-                src="./pic/score-transparent.png?v=20260425-opt3"
+                src="./pic/琴谱 new_transparent.png?v=20260425-score-new1"
                 alt="琴谱"
                 draggable="false"
               />
@@ -237,6 +272,6 @@
       ></canvas>
     </aside>
 
-    <script type="module" src="./main.js?v=20260425-tuner1"></script>
+    <script type="module" src="./main.js?v=20260425-skip-final1"></script>
   </body>
 </html>

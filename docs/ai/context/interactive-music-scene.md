@@ -15,7 +15,7 @@
 - 不引入框架，原因是当前项目只有素材，没有既有前端工程，直接静态实现成本最低
 - 背景图当前使用 `pic/bg1.png`
 - 新增一个备用背景 `pic/bg2.png`
-- 当前谱面素材使用 `pic/score-transparent.png`
+- 当前谱面素材使用 `pic/琴谱 new_transparent.png`
 - 乐器图层使用透明背景版本：`pic/violin_transparent.png`、`pic/shuqin_transparent.png`、`pic/dianziqin_transparent.png`、`pic/jiazigu_transparent.png`、`pic/guitar_transparent.png`
 - 页面为纯场景模式，只保留背景图、乐器贴图和鼠标排斥效果
 - 已删除拖拽摆位、坐标导出、`localStorage` 测试逻辑和实时滑杆面板
@@ -23,8 +23,8 @@
 - 原背景文件已重命名为 `pic/bg1.png`
 - 场景容器按新背景比例 `1774:887` 在视口内等比完整展示
 - 当前页面已改为双页结构：第一页为互动场景，第二页为谱面展示页
-- 第二页背景图 `pic/bg2.png` 当前按完整显示处理，未被裁切，剩余区域填充纯黑
-- 临时摆位、缩放与坐标导出工具已移除
+- 第二页背景图已切换为 `pic/score-bg-fullscreen.png`，并按全屏铺满方式展示
+- 第二页已临时恢复琴谱摆位、缩放与坐标导出工具，等待用户确认新坐标
 
 ## 已确认默认摆位
 

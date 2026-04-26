@@ -10,6 +10,11 @@ const videoStage = document.querySelector("#video-stage");
 const referenceVideo = document.querySelector("#reference-video");
 const videoActions = document.querySelector("#video-actions");
 const videoSkipButton = document.querySelector("#video-skip");
+const videoVolumeControl = document.querySelector("#video-volume-control");
+const videoVolumeToggle = document.querySelector("#video-volume-toggle");
+const videoVolumeRange = document.querySelector("#video-volume-range");
+const finalStage = document.querySelector("#final-stage");
+const finalFrame = document.querySelector("#final-frame");
 const interactionActions = document.querySelector("#interaction-actions");
 const interactionContinueButton = document.querySelector("#interaction-continue");
 const pageNav = document.querySelector(".page-nav");
@@ -93,17 +98,17 @@ const defaultPhysics = {
 const physics = { ...defaultPhysics };
 
 const defaultScoreParticleConfig = {
-  sampleStep: 2,
+  sampleStep: 1,
   alphaThreshold: 22,
-  darknessThreshold: 0.08,
-  minParticleSize: 0.85,
+  darknessThreshold: 0.39,
+  minParticleSize: 0.75,
   particleSizeBase: 0.22,
   particleSizeDarknessScale: 0.42,
-  interactionRadius: 88,
-  repelStrength: 14,
+  interactionRadius: 20,
+  repelStrength: 5,
   swirlStrength: 3.2,
-  spring: 0.085,
-  damping: 0.88,
+  spring: 0.105,
+  damping: 0.82,
   maxSpeed: 26,
   maxCanvasScale: 2,
   touchLandmarkIndices: [0, 4, 8, 12, 16, 20],
@@ -175,20 +180,16 @@ const trackingState = {
 };
 
 const defaultScoreState = {
-  x: 46.6,
-  y: 18.7,
+  x: 47.8,
+  y: 32.2,
   width: 83,
   height: 140.1,
-  scale: 0.3,
+  scale: 0.53,
+  stretchX: 1.06,
+  stretchY: 0.81,
 };
 
 const scoreState = { ...defaultScoreState };
-const scoreLayoutConfig = {
-  artboardWidth: 1682,
-  artboardHeight: 2528,
-  legacyStageWidth: 1774,
-  legacyStageHeight: 887,
-};
 const createScoreParticleSprite = () => {
   const spriteSize = 48;
   const spriteCanvas = document.createElement("canvas");
@@ -231,17 +232,17 @@ const scoreParticleState = {
 };
 const videoSegments = [
   {
-    src: "./video/0baa12eb2ae33a003c103a1a1a269781_raw.mp4?v=20260425-newclips1",
+    src: "./video/1a21117e4e7916df5b51a3864ea114a9_raw.mp4?v=20260425-newclips2",
     interactionIndex: 0,
     id: "video-part-1",
   },
   {
-    src: "./video/ab039202842864c33ee0cfe180f29e57_raw.mp4?v=20260425-newclips1",
+    src: "./video/4577a95e9284af02d27603fb8d11bc3e_raw.mp4?v=20260425-newclips3",
     interactionIndex: 1,
     id: "video-part-2",
   },
   {
-    src: "./video/7b8e95fe6e49261b02e7e7d8c41b8601_raw.mp4?v=20260425-newclips1",
+    src: "./video/e1e4aa1ee14b1794a6d6d781f966be1a_raw.mp4?v=20260425-newclips4",
     interactionIndex: null,
     id: "video-part-3",
   },
@@ -261,11 +262,10 @@ const timelineState = {
   currentSegmentIndex: 0,
 };
 
-const legacyScoreArtboardWidthRatio =
-  (scoreLayoutConfig.legacyStageHeight *
-    (scoreLayoutConfig.artboardWidth / scoreLayoutConfig.artboardHeight)) /
-  scoreLayoutConfig.legacyStageWidth;
-const legacyScoreArtboardLeftRatio = (1 - legacyScoreArtboardWidthRatio) * 0.5;
+const videoVolumeState = {
+  volume: 0.7,
+  muted: true,
+};
 
 let currentPageIndex = 0;
 let sceneRect = sceneStage.getBoundingClientRect();
@@ -305,7 +305,17 @@ const musicTuningControls = [
   { key: "yLimit", label: "纵向位移上限", min: 0.05, max: 0.8, step: 0.01 },
 ];
 
-const scoreTuningControls = [
+const scoreLayoutTuningControls = [
+  { key: "x", label: "中心 X", min: -50, max: 150, step: 0.1 },
+  { key: "y", label: "中心 Y", min: -50, max: 150, step: 0.1 },
+  { key: "width", label: "基础宽度", min: 10, max: 240, step: 0.1 },
+  { key: "height", label: "基础高度", min: 10, max: 260, step: 0.1 },
+  { key: "scale", label: "整体缩放", min: 0.05, max: 3, step: 0.01 },
+  { key: "stretchY", label: "只上下拉伸", min: 0.2, max: 3, step: 0.01 },
+  { key: "stretchX", label: "只左右拉伸", min: 0.2, max: 3, step: 0.01 },
+];
+
+const scoreParticleTuningControls = [
   { key: "sampleStep", label: "采样步长", min: 1, max: 6, step: 1 },
   { key: "alphaThreshold", label: "透明阈值", min: 0, max: 80, step: 1 },
   { key: "darknessThreshold", label: "暗部阈值", min: 0, max: 0.4, step: 0.01 },
@@ -351,6 +361,7 @@ const setupTuningPanel = ({
   panel,
   title,
   description,
+  sections,
   controls,
   source,
   defaults,
@@ -363,6 +374,18 @@ const setupTuningPanel = ({
 
   const inputs = new Map();
   let statusTimer = 0;
+  const normalizedSections = sections ?? [
+    {
+      key: "default",
+      title: "",
+      description: "",
+      controls,
+      source,
+      defaults,
+      onChange,
+    },
+  ];
+  const getInputKey = (sectionKey, controlKey) => `${sectionKey}:${controlKey}`;
 
   const titleElement = document.createElement("h3");
   titleElement.className = "scene-tuner__title";
@@ -393,74 +416,101 @@ const setupTuningPanel = ({
   };
 
   const syncInputs = () => {
-    controls.forEach((control) => {
-      const input = inputs.get(control.key);
-      if (!input) {
-        return;
-      }
+    normalizedSections.forEach((section) => {
+      section.controls.forEach((control) => {
+        const input = inputs.get(getInputKey(section.key, control.key));
+        if (!input) {
+          return;
+        }
 
-      input.value = formatControlValue(source[control.key], control.step);
+        input.value = formatControlValue(section.source[control.key], control.step);
+      });
     });
   };
   const syncOutput = () => {
     output.value = JSON.stringify(getPayload(), null, 2);
   };
 
-  controls.forEach((control) => {
-    const field = document.createElement("label");
-    field.className = "scene-tuner__field";
+  normalizedSections.forEach((section) => {
+    const sectionElement = document.createElement("section");
+    sectionElement.className = "scene-tuner__section";
 
-    const labelRow = document.createElement("span");
-    labelRow.className = "scene-tuner__field-label";
+    if (section.title) {
+      const sectionTitle = document.createElement("h4");
+      sectionTitle.className = "scene-tuner__section-title";
+      sectionTitle.textContent = section.title;
+      sectionElement.append(sectionTitle);
+    }
 
-    const labelText = document.createElement("span");
-    labelText.textContent = control.label;
+    if (section.description) {
+      const sectionDescription = document.createElement("p");
+      sectionDescription.className = "scene-tuner__section-description";
+      sectionDescription.textContent = section.description;
+      sectionElement.append(sectionDescription);
+    }
 
-    const labelNote = document.createElement("span");
-    labelNote.className = "scene-tuner__field-note";
-    labelNote.textContent = `${control.min} - ${control.max}`;
+    const sectionGrid = document.createElement("div");
+    sectionGrid.className = "scene-tuner__grid";
 
-    const input = document.createElement("input");
-    input.type = "number";
-    input.min = String(control.min);
-    input.max = String(control.max);
-    input.step = String(control.step);
-    input.value = formatControlValue(source[control.key], control.step);
+    section.controls.forEach((control) => {
+      const field = document.createElement("label");
+      field.className = "scene-tuner__field";
 
-    const updateValue = (commit = false) => {
-      if (input.value === "") {
-        return;
-      }
+      const labelRow = document.createElement("span");
+      labelRow.className = "scene-tuner__field-label";
 
-      const nextValue = Number.parseFloat(input.value);
-      if (!Number.isFinite(nextValue)) {
-        return;
-      }
+      const labelText = document.createElement("span");
+      labelText.textContent = control.label;
 
-      const normalized = normalizeControlValue(nextValue, control);
-      source[control.key] = normalized;
-      onChange?.(control.key, normalized);
-      syncOutput();
+      const labelNote = document.createElement("span");
+      labelNote.className = "scene-tuner__field-note";
+      labelNote.textContent = `${control.min} - ${control.max}`;
 
-      if (commit) {
-        input.value = formatControlValue(normalized, control.step);
-      }
-    };
+      const input = document.createElement("input");
+      input.type = "number";
+      input.min = String(control.min);
+      input.max = String(control.max);
+      input.step = String(control.step);
+      input.value = formatControlValue(section.source[control.key], control.step);
 
-    input.addEventListener("input", () => {
-      updateValue(false);
+      const updateValue = (commit = false) => {
+        if (input.value === "") {
+          return;
+        }
+
+        const nextValue = Number.parseFloat(input.value);
+        if (!Number.isFinite(nextValue)) {
+          return;
+        }
+
+        const normalized = normalizeControlValue(nextValue, control);
+        section.source[control.key] = normalized;
+        section.onChange?.(control.key, normalized);
+        syncOutput();
+
+        if (commit) {
+          input.value = formatControlValue(normalized, control.step);
+        }
+      };
+
+      input.addEventListener("input", () => {
+        updateValue(false);
+      });
+      input.addEventListener("change", () => {
+        updateValue(true);
+      });
+      input.addEventListener("blur", () => {
+        input.value = formatControlValue(section.source[control.key], control.step);
+      });
+
+      labelRow.append(labelText, labelNote);
+      field.append(labelRow, input);
+      sectionGrid.append(field);
+      inputs.set(getInputKey(section.key, control.key), input);
     });
-    input.addEventListener("change", () => {
-      updateValue(true);
-    });
-    input.addEventListener("blur", () => {
-      input.value = formatControlValue(source[control.key], control.step);
-    });
 
-    labelRow.append(labelText, labelNote);
-    field.append(labelRow, input);
-    grid.append(field);
-    inputs.set(control.key, input);
+    sectionElement.append(sectionGrid);
+    grid.append(sectionElement);
   });
 
   const actions = document.createElement("div");
@@ -481,10 +531,12 @@ const setupTuningPanel = ({
   resetButton.className = "scene-tuner__action";
   resetButton.textContent = "重置";
   resetButton.addEventListener("click", () => {
-    controls.forEach((control) => {
-      source[control.key] = defaults[control.key];
+    normalizedSections.forEach((section) => {
+      section.controls.forEach((control) => {
+        section.source[control.key] = section.defaults[control.key];
+      });
+      section.onChange?.();
     });
-    onChange?.();
     syncInputs();
     syncOutput();
     setStatus("已恢复默认参数。");
@@ -533,13 +585,18 @@ const syncVideoSkipUi = () => {
     return;
   }
 
-  const hasPendingInteraction =
+  const currentSegment = getCurrentVideoSegment();
+  const canSkipToInteraction = currentSegment?.interactionIndex !== null &&
+    currentSegment?.interactionIndex !== undefined;
+  const canSkipToFinal = isLastVideoSegment();
+  const shouldShow =
     isVideoTimelineMode &&
     timelineState.activeInteractionIndex === null &&
-    getCurrentVideoSegment()?.interactionIndex !== null;
+    !document.body.classList.contains("is-final-active") &&
+    (canSkipToInteraction || canSkipToFinal);
 
-  videoActions.classList.toggle("is-hidden", !hasPendingInteraction);
-  videoActions.setAttribute("aria-hidden", hasPendingInteraction ? "false" : "true");
+  videoActions.classList.toggle("is-hidden", !shouldShow);
+  videoActions.setAttribute("aria-hidden", shouldShow ? "false" : "true");
 };
 
 const getInteractionStep = (interactionIndex) => {
@@ -548,6 +605,55 @@ const getInteractionStep = (interactionIndex) => {
 
 const getCurrentVideoSegment = () => {
   return videoSegments[timelineState.currentSegmentIndex] ?? null;
+};
+
+const isLastVideoSegment = () => timelineState.currentSegmentIndex >= videoSegments.length - 1;
+
+const setFinalStageVisible = (visible) => {
+  document.body.classList.toggle("is-final-active", visible);
+
+  if (finalStage) {
+    finalStage.classList.toggle("is-hidden", !visible);
+    finalStage.setAttribute("aria-hidden", visible ? "false" : "true");
+  }
+
+  if (videoStage) {
+    videoStage.classList.toggle("is-hidden", visible);
+    videoStage.setAttribute("aria-hidden", visible ? "true" : "false");
+  }
+
+  if (visible) {
+    referenceVideo?.pause();
+    sceneStage?.classList.add("is-hidden");
+    sceneStage?.setAttribute("aria-hidden", "true");
+    interactionActions?.classList.add("is-hidden");
+    interactionActions?.setAttribute("aria-hidden", "true");
+    trackingPreview?.classList.add("is-hidden");
+    trackingPreview?.setAttribute("aria-hidden", "true");
+
+    if (finalFrame && !finalFrame.getAttribute("src")) {
+      finalFrame.setAttribute("src", finalFrame.dataset.src ?? "./synthesizer.html");
+    }
+  }
+};
+
+const syncVideoVolumeUi = () => {
+  if (!referenceVideo) {
+    return;
+  }
+
+  referenceVideo.volume = videoVolumeState.volume;
+  referenceVideo.muted = videoVolumeState.muted || videoVolumeState.volume <= 0;
+
+  if (videoVolumeRange) {
+    videoVolumeRange.value = String(videoVolumeState.volume);
+  }
+
+  if (videoVolumeToggle) {
+    const muted = referenceVideo.muted;
+    videoVolumeToggle.textContent = muted ? "开声" : "声音";
+    videoVolumeToggle.setAttribute("aria-pressed", muted ? "false" : "true");
+  }
 };
 
 const setVideoSegment = (segmentIndex) => {
@@ -567,6 +673,8 @@ const setVideoSegment = (segmentIndex) => {
     referenceVideo.setAttribute("src", nextSegment.src);
     referenceVideo.load();
   }
+
+  syncVideoVolumeUi();
 };
 
 const playReferenceVideo = async () => {
@@ -574,10 +682,12 @@ const playReferenceVideo = async () => {
     return;
   }
 
-  // 浏览器默认拦截带声音的自动播放，这里先固定静音，确保刷新后能直接进入时间轴。
-  referenceVideo.defaultMuted = true;
-  referenceVideo.muted = true;
-  await referenceVideo.play().catch(() => undefined);
+  syncVideoVolumeUi();
+  await referenceVideo.play().catch(async () => {
+    videoVolumeState.muted = true;
+    syncVideoVolumeUi();
+    await referenceVideo.play().catch(() => undefined);
+  });
 };
 
 const setInteractionUiVisible = (visible) => {
@@ -657,6 +767,11 @@ const skipToNextInteraction = () => {
     return;
   }
 
+  if (isLastVideoSegment()) {
+    setFinalStageVisible(true);
+    return;
+  }
+
   openInteractionForCurrentSegment();
 };
 
@@ -665,9 +780,10 @@ const setupVideoPlayer = () => {
     return;
   }
 
+  setFinalStageVisible(false);
   setInteractionUiVisible(false);
   referenceVideo.defaultMuted = true;
-  referenceVideo.muted = true;
+  syncVideoVolumeUi();
   setVideoSegment(0);
   syncVideoSkipUi();
 
@@ -680,6 +796,11 @@ const setupVideoPlayer = () => {
   });
 
   referenceVideo.addEventListener("ended", () => {
+    if (isLastVideoSegment()) {
+      setFinalStageVisible(true);
+      return;
+    }
+
     openInteractionForCurrentSegment();
   });
 
@@ -689,6 +810,23 @@ const setupVideoPlayer = () => {
 
   interactionContinueButton?.addEventListener("click", () => {
     continueTimelinePlayback();
+  });
+
+  videoVolumeToggle?.addEventListener("click", () => {
+    videoVolumeState.muted = !videoVolumeState.muted;
+    if (!videoVolumeState.muted && videoVolumeState.volume <= 0) {
+      videoVolumeState.volume = 0.7;
+    }
+
+    syncVideoVolumeUi();
+    playReferenceVideo();
+  });
+
+  videoVolumeRange?.addEventListener("input", () => {
+    const nextVolume = clamp(Number.parseFloat(videoVolumeRange.value), 0, 1);
+    videoVolumeState.volume = Number.isFinite(nextVolume) ? nextVolume : 0;
+    videoVolumeState.muted = videoVolumeState.volume <= 0;
+    syncVideoVolumeUi();
   });
 
   playReferenceVideo();
@@ -744,16 +882,14 @@ const getActiveInteractionSource = (currentTime) => {
 };
 
 const applyScoreState = () => {
-  const visibleWidthRatio = (scoreState.width / 100) * scoreState.scale;
-  const visibleHeightRatio = (scoreState.height / 100) * scoreState.scale;
-  const mappedX =
-    ((scoreState.x / 100 - legacyScoreArtboardLeftRatio) / legacyScoreArtboardWidthRatio) * 100;
-  const mappedWidth = (visibleWidthRatio / legacyScoreArtboardWidthRatio) * 100;
+  // 谱面页改成全屏背景后，摆位参数直接按整屏百分比生效，避免再套旧画板映射。
+  const visibleWidth = scoreState.width * scoreState.scale * scoreState.stretchX;
+  const visibleHeight = scoreState.height * scoreState.scale * scoreState.stretchY;
 
-  scoreSheet.style.setProperty("--score-x", `${mappedX}%`);
+  scoreSheet.style.setProperty("--score-x", `${scoreState.x}%`);
   scoreSheet.style.setProperty("--score-y", `${scoreState.y}%`);
-  scoreSheet.style.setProperty("--score-width", `${mappedWidth}%`);
-  scoreSheet.style.setProperty("--score-height", `${visibleHeightRatio * 100}%`);
+  scoreSheet.style.setProperty("--score-width", `${visibleWidth}%`);
+  scoreSheet.style.setProperty("--score-height", `${visibleHeight}%`);
 };
 
 const resizeScoreParticleCanvas = () => {
@@ -1024,16 +1160,35 @@ setupTuningPanel({
   toggle: scoreTunerToggle,
   panel: scoreTunerPanel,
   title: "琴谱页调参",
-  description: "这里可以同时调粒子密度、粒子大小和排斥回弹效果。",
-  controls: scoreTuningControls,
-  source: scoreParticleConfig,
-  defaults: defaultScoreParticleConfig,
-  onChange: () => {
-    rebuildScoreParticles();
-  },
+  description: "这里同时保留摆位、横纵向拉伸和粒子效果调参，改完直接复制 JSON 发给我。",
+  sections: [
+    {
+      key: "layout",
+      title: "摆位与拉伸",
+      description: "“只上下拉伸”只改高度，“只左右拉伸”只改宽度，另一方向保持不动。",
+      controls: scoreLayoutTuningControls,
+      source: scoreState,
+      defaults: defaultScoreState,
+      onChange: () => {
+        applyScoreState();
+        rebuildScoreParticles();
+      },
+    },
+    {
+      key: "particle",
+      title: "粒子效果",
+      description: "这里调粒子密度、大小、排斥和回弹手感。",
+      controls: scoreParticleTuningControls,
+      source: scoreParticleConfig,
+      defaults: defaultScoreParticleConfig,
+      onChange: () => {
+        rebuildScoreParticles();
+      },
+    },
+  ],
   getPayload: () => ({
-    page: "score",
-    scoreParticleConfig: pickControlValues(scoreParticleConfig, scoreTuningControls),
+    scoreState: pickControlValues(scoreState, scoreLayoutTuningControls),
+    scoreParticleConfig: pickControlValues(scoreParticleConfig, scoreParticleTuningControls),
   }),
 });
 
@@ -1491,6 +1646,7 @@ if (shouldInitializeInteractionLayer) {
 
   window.addEventListener("resize", () => {
     measureScene();
+    applyScoreState();
     rebuildScoreParticles();
   });
 

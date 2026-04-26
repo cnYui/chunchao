@@ -7,11 +7,18 @@
 ## 输入文件
 
 - `pic/琴谱.png`
+- `pic/琴谱 new.png`
 
 ## 输出文件
 
 - `pic/琴谱_transparent.png`
-- 前端当前实际使用其 ASCII 别名 `pic/score-transparent.png`
+- `pic/琴谱 new_transparent.png`
+
+## 补充说明
+
+- `pic/琴谱 new.png` 当前仅作为新入库的候选原图保留
+- `pic/琴谱 new_transparent.png` 已通过本地脚本生成，并已切换到当前前端
+- 当前可复用脚本为 `scripts/remove_white_background.py`
 
 ## 处理策略
 
@@ -31,6 +38,7 @@
 ## 校验结果
 
 - 输出文件格式为 `RGBA PNG`
-- 输出尺寸保持 `2888 x 1440`
+- `pic/琴谱_transparent.png` 输出尺寸保持 `2888 x 1440`
+- `pic/琴谱 new_transparent.png` 输出尺寸保持 `2892 x 1440`
 - 输出 alpha 范围为 `0 ~ 255`
 - 原图未覆盖
