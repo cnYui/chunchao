@@ -10,10 +10,10 @@ export const defaultControlState = {
 };
 
 const vibePresets = [
-  { name: 'WARM', type: 'sawtooth', detune: 5 },
-  { name: 'BRIGHT', type: 'square', detune: 10 },
-  { name: 'COLD', type: 'sine', detune: 0 },
-  { name: 'DARK', type: 'triangle', detune: -5 },
+  { name: 'WARM', type: 'sawtooth', detune: 5, cutoffScale: 1 },
+  { name: 'BRIGHT', type: 'square', detune: 10, cutoffScale: 1.35 },
+  { name: 'COLD', type: 'sine', detune: 0, cutoffScale: 1.1 },
+  { name: 'DARK', type: 'triangle', detune: -5, cutoffScale: 0.62 },
 ];
 
 export const getVibeIndexFromAngle = (angle = defaultControlState.knobAngle) => {
@@ -37,6 +37,54 @@ const createImpulseBuffer = (audioContext) => {
 
   return buffer;
 };
+
+const createNoiseBuffer = (audioContext, duration = 0.2) => {
+  const sampleRate = audioContext.sampleRate;
+  const length = Math.max(1, Math.floor(sampleRate * duration));
+  const buffer = audioContext.createBuffer(1, length, sampleRate);
+  const data = buffer.getChannelData(0);
+
+  for (let index = 0; index < length; index += 1) {
+    data[index] = Math.random() * 2 - 1;
+  }
+
+  return buffer;
+};
+
+const normalizePadSounds = ({ frequencies = [], padSounds = [] }) => {
+  if (padSounds.length) {
+    return padSounds.map((sound, index) => ({
+      ...sound,
+      frequency: sound.frequency ?? frequencies[index],
+    }));
+  }
+
+  return frequencies.map((frequency, index) => ({
+    key: `tone-${index + 1}`,
+    label: `TONE ${index + 1}`,
+    frequency,
+  }));
+};
+
+const getVoicePreset = ({ frequency, sound }) => ({
+  key: sound?.key ?? 'tone',
+  frequency: sound?.frequency ?? frequency,
+  oscillatorType: sound?.oscillatorType ?? 'sawtooth',
+  gain: sound?.gain ?? 0.14,
+  sustain: sound?.sustain ?? 0.1,
+  attack: sound?.attack ?? 0.012,
+  release: sound?.release ?? 0.16,
+  filterType: sound?.filterType ?? 'lowpass',
+  filterFrequency: sound?.filterFrequency ?? 1800,
+  filterQ: sound?.filterQ ?? 0.9,
+  detune: sound?.detune ?? 0,
+  pitchBendCents: sound?.pitchBendCents ?? 0,
+  bendTime: sound?.bendTime ?? 0.08,
+  secondaryFrequencyRatio: sound?.secondaryFrequencyRatio ?? null,
+  secondaryGain: sound?.secondaryGain ?? 0,
+  noiseGain: sound?.noiseGain ?? 0,
+  noiseDuration: sound?.noiseDuration ?? 0.12,
+});
 
 export const createBrowserAudioSystem = ({
   initialControlState = defaultControlState,
@@ -82,11 +130,16 @@ export const createBrowserAudioSystem = ({
     return controlState;
   };
 
-  const createVoiceBackend = ({ frequency, controlState: initialVoiceState }) => {
+  const createVoiceBackend = ({ frequency, sound, controlState: initialVoiceState }) => {
+    const preset = getVoicePreset({ frequency, sound });
     let oscillator = null;
+    let secondaryOscillator = null;
+    let secondaryGain = null;
     let voiceGain = null;
     let wetSend = null;
     let panner = null;
+    let filter = null;
+    const stoppableSources = [];
 
     const applyVoiceState = (nextState) => {
       if (!oscillator || !voiceGain) {
@@ -94,11 +147,20 @@ export const createBrowserAudioSystem = ({
       }
 
       const mergedState = { ...controlState, ...nextState };
-      const vibe = vibePresets[getVibeIndexFromAngle(mergedState.knobAngle)];
+      const vibeIndex = getVibeIndexFromAngle(mergedState.knobAngle);
+      const vibe = vibePresets[vibeIndex];
       const currentTime = audioContext.currentTime;
 
-      oscillator.type = vibe.type;
-      oscillator.detune.setTargetAtTime(vibe.detune, currentTime, 0.03);
+      oscillator.type = preset.oscillatorType ?? vibe.type;
+      oscillator.detune.setTargetAtTime(preset.detune + vibe.detune, currentTime, 0.03);
+      if (secondaryOscillator) {
+        secondaryOscillator.type = vibe.type;
+        secondaryOscillator.detune.setTargetAtTime(preset.detune - vibe.detune, currentTime, 0.03);
+      }
+      if (filter) {
+        filter.frequency.setTargetAtTime(preset.filterFrequency * vibe.cutoffScale, currentTime, 0.06);
+        filter.Q.setTargetAtTime(preset.filterQ, currentTime, 0.06);
+      }
       wetSend.gain.setTargetAtTime(mergedState.reverb * 0.65, currentTime, 0.06);
 
       if (panner) {
@@ -109,15 +171,59 @@ export const createBrowserAudioSystem = ({
     return {
       start() {
         const context = ensureAudioGraph();
+        const currentTime = context.currentTime;
+        const baseFrequency = Math.max(1, preset.frequency);
+        const bendStartFrequency = Math.max(1, baseFrequency * (2 ** (preset.pitchBendCents / 1200)));
         oscillator = context.createOscillator();
+        filter = context.createBiquadFilter();
         voiceGain = context.createGain();
         wetSend = context.createGain();
         panner = context.createStereoPanner ? context.createStereoPanner() : null;
 
-        oscillator.frequency.setValueAtTime(frequency, context.currentTime);
-        voiceGain.gain.setValueAtTime(0.0001, context.currentTime);
+        filter.type = preset.filterType;
+        filter.frequency.setValueAtTime(preset.filterFrequency, currentTime);
+        filter.Q.setValueAtTime(preset.filterQ, currentTime);
 
-        oscillator.connect(voiceGain);
+        oscillator.frequency.setValueAtTime(bendStartFrequency, currentTime);
+        if (preset.pitchBendCents) {
+          oscillator.frequency.exponentialRampToValueAtTime(baseFrequency, currentTime + preset.bendTime);
+        }
+        voiceGain.gain.setValueAtTime(0.0001, currentTime);
+
+        oscillator.connect(filter);
+        filter.connect(voiceGain);
+
+        if (preset.secondaryFrequencyRatio && preset.secondaryGain > 0) {
+          secondaryOscillator = context.createOscillator();
+          secondaryGain = context.createGain();
+          secondaryOscillator.frequency.setValueAtTime(
+            Math.max(1, baseFrequency * preset.secondaryFrequencyRatio),
+            currentTime,
+          );
+          secondaryGain.gain.setValueAtTime(preset.secondaryGain, currentTime);
+          secondaryOscillator.connect(secondaryGain);
+          secondaryGain.connect(filter);
+        }
+
+        if (preset.noiseGain > 0) {
+          const noiseSource = context.createBufferSource();
+          const noiseFilter = context.createBiquadFilter();
+          const noiseGain = context.createGain();
+
+          noiseSource.buffer = createNoiseBuffer(context, preset.noiseDuration);
+          noiseFilter.type = preset.filterType === 'highpass' ? 'highpass' : 'bandpass';
+          noiseFilter.frequency.setValueAtTime(preset.filterFrequency, currentTime);
+          noiseFilter.Q.setValueAtTime(Math.max(0.8, preset.filterQ), currentTime);
+          noiseGain.gain.setValueAtTime(preset.noiseGain, currentTime);
+          noiseGain.gain.exponentialRampToValueAtTime(0.0001, currentTime + preset.noiseDuration);
+          noiseSource.connect(noiseFilter);
+          noiseFilter.connect(noiseGain);
+          noiseGain.connect(filter);
+          noiseSource.start(currentTime);
+          noiseSource.stop(currentTime + preset.noiseDuration + 0.02);
+          stoppableSources.push(noiseSource);
+        }
+
         if (panner) {
           voiceGain.connect(panner);
           panner.connect(masterGain);
@@ -132,7 +238,9 @@ export const createBrowserAudioSystem = ({
         applyVoiceState(initialVoiceState);
 
         oscillator.start();
-        voiceGain.gain.linearRampToValueAtTime(0.14, context.currentTime + 0.035);
+        secondaryOscillator?.start();
+        voiceGain.gain.linearRampToValueAtTime(preset.gain, currentTime + preset.attack);
+        voiceGain.gain.setTargetAtTime(preset.sustain, currentTime + preset.attack, 0.08);
       },
       stop() {
         if (!oscillator || !voiceGain) {
@@ -141,8 +249,16 @@ export const createBrowserAudioSystem = ({
 
         const currentTime = audioContext.currentTime;
         voiceGain.gain.cancelScheduledValues(currentTime);
-        voiceGain.gain.setTargetAtTime(0.0001, currentTime, 0.08);
-        oscillator.stop(currentTime + 0.16);
+        voiceGain.gain.setTargetAtTime(0.0001, currentTime, preset.release);
+        oscillator.stop(currentTime + preset.release + 0.08);
+        secondaryOscillator?.stop(currentTime + preset.release + 0.08);
+        stoppableSources.forEach((source) => {
+          try {
+            source.stop(currentTime);
+          } catch {
+            // source 可能已经按自身包络结束，这里只负责补停止。
+          }
+        });
       },
       update(nextState) {
         applyVoiceState(nextState);
@@ -173,13 +289,15 @@ export const createBrowserAudioSystem = ({
 };
 
 export const createAudioEngine = ({
-  frequencies,
+  frequencies = [],
+  padSounds = [],
   createVoiceBackend = defaultVoiceBackendFactory,
   initialControlState = defaultControlState,
   onControlStateChange,
 }) => {
   const activeVoices = new Map();
   const controlState = { ...initialControlState };
+  const resolvedPadSounds = normalizePadSounds({ frequencies, padSounds });
 
   const notifyControlState = () => {
     const snapshot = { ...controlState };
@@ -194,7 +312,8 @@ export const createAudioEngine = ({
       return;
     }
 
-    const frequency = frequencies[padId];
+    const sound = resolvedPadSounds[padId];
+    const frequency = sound?.frequency;
     if (!Number.isFinite(frequency)) {
       return;
     }
@@ -202,6 +321,7 @@ export const createAudioEngine = ({
     const voice = createVoiceBackend({
       padId,
       frequency,
+      sound,
       controlState: { ...controlState },
     });
     voice.start();
@@ -244,5 +364,6 @@ export const createAudioEngine = ({
     setSliderValue,
     getActiveVoiceIds: () => [...activeVoices.keys()],
     getControlState: () => ({ ...controlState }),
+    getPadSounds: () => resolvedPadSounds.map((sound) => ({ ...sound })),
   };
 };

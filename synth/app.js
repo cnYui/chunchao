@@ -10,15 +10,11 @@ import { createHandBounds, mapPointToKnobAngle, mapPointToSliderValue } from './
 import { createOccupancyDetector } from './occupancy-detector.js';
 import { createProjectiveTransform, mapDomRectToQuad } from './projection-calibration.js';
 import { computeMaskedFeatureFromImageData, getQuadBounds } from './roi-sampling.js';
+import { strudelPadFrequencies, strudelPadSounds } from './sound-presets.js';
 import { createSynthRouter } from './synth-router.js';
 import { createUiControls } from './ui-controls.js';
 
-const frequencies = [
-  261.63, 293.66, 329.63, 349.23,
-  392.0, 440.0, 493.88, 523.25,
-  587.33, 659.25, 698.46, 783.99,
-  880.0, 987.77, 1046.5, 1174.66
-];
+const frequencies = strudelPadFrequencies;
 
 const calibrationOrder = ['左上', '右上', '右下', '左下'];
 const sliderKeys = ['volume', 'reverb', 'position'];
@@ -33,6 +29,7 @@ const browserAudio = createBrowserAudioSystem({
 });
 const audioEngine = createAudioEngine({
   frequencies,
+  padSounds: strudelPadSounds,
   createVoiceBackend: browserAudio.createVoiceBackend,
   initialControlState: defaultControlState,
   onControlStateChange: browserAudio.applyControlState,
@@ -380,6 +377,12 @@ const renderDebug = (handPoint = null) => {
 
 const wirePadFallback = () => {
   uiControls.getPadElements().forEach((pad, index) => {
+    const sound = strudelPadSounds[index];
+    if (sound) {
+      pad.title = sound.label;
+      pad.setAttribute('aria-label', `Pad ${index + 1} ${sound.label}`);
+    }
+
     const stop = () => {
       audioEngine.stopPadVoice(index);
       if (!state.baselineReady) {
@@ -675,6 +678,7 @@ const bootstrap = async () => {
 
 window.synthRuntime = {
   frequencies,
+  strudelPadSounds,
   uiControls,
   cameraController,
   handController,

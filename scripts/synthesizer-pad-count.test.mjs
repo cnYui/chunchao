@@ -2,6 +2,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { strudelPadFrequencies } from '../synth/sound-presets.js';
+
 const html = readFileSync(new URL('../synthesizer.html', import.meta.url), 'utf8');
 const appJsPath = new URL('../synth/app.js', import.meta.url);
 const appJs = existsSync(appJsPath) ? readFileSync(appJsPath, 'utf8') : '';
@@ -34,16 +36,9 @@ test('最终合成器页面使用暗红舞台风格标记', () => {
 });
 
 test('每个触发按钮都有对应音高', () => {
-  const freqsMatch = appJs.match(/const\s+frequencies\s*=\s*\[([^\]]+)\]/);
-
-  assert.ok(freqsMatch);
-
-  const freqs = freqsMatch[1]
-    .split(',')
-    .map((freq) => Number(freq.trim()))
-    .filter(Number.isFinite);
-
-  assert.equal(freqs.length, 16);
+  assert.match(appJs, /strudelPadFrequencies/);
+  assert.equal(strudelPadFrequencies.length, 16);
+  assert.ok(strudelPadFrequencies.every((frequency) => Number.isFinite(frequency)));
 });
 
 test('最终展示页包含模块入口和调试层容器', () => {
