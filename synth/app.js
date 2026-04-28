@@ -29,6 +29,7 @@ import {
 } from './preview-mode.js';
 import { createProjectiveTransform, mapDomRectToQuad } from './projection-calibration.js';
 import { computeMaskedFeatureFromImageData, getQuadBounds } from './roi-sampling.js';
+import { shouldAutoCaptureBaselineOnModeChange } from './roi-runtime-flow.js';
 import { getGridCellPatternKey, gridPatternKeys } from './strudel-score.js';
 import { createSynthRouter } from './synth-router.js';
 import { createUiControls } from './ui-controls.js';
@@ -655,8 +656,8 @@ const updateUiState = () => {
         ui.hintText.textContent = '对位模式：调整摄像头，让半透明画面和触发框与下方合成器重合；完成后切到运行模式';
       } else {
         ui.hintText.textContent = state.baselineReady
-          ? '运行模式：摄像头回显已隐藏，后台继续识别'
-          : '运行模式：先保持 16 格为空，再点击采集空场';
+          ? '运行模式：ROI 已启动，遮挡右侧 16 格会直接触发声音'
+          : '运行模式：正在等待空场完成，未完成前 16 格不会发声';
       }
     } else if (state.layoutMode) {
       ui.hintText.textContent = currentStep
@@ -898,16 +899,37 @@ const clearLayoutDraft = () => {
   updateUiState();
 };
 
-const cyclePreviewMode = () => {
+const cyclePreviewMode = async () => {
   state.previewMode = togglePreviewMode(state.previewMode);
+  const activeGeometry = getActiveGeometry();
+  const shouldAutoCapture = shouldAutoCaptureBaselineOnModeChange({
+    nextPreviewMode: state.previewMode,
+    baselineReady: state.baselineReady,
+    geometryReady: activeGeometry.padRois.length === padCount,
+  });
+
   setStatus(
     state.previewMode === previewModes.align
       ? '已切回对位模式，请继续调整摄像头与触发图'
-      : '已进入运行模式，实时回显已隐藏，可采集空场并开始识别',
+      : shouldAutoCapture
+        ? '已进入运行模式，正在自动采集空场，请保持 16 格为空'
+        : '已进入运行模式，实时回显已隐藏，可直接开始识别',
   );
   stylePreviewElements();
   updateUiState();
   renderDebug();
+
+  if (shouldAutoCapture) {
+    try {
+      await captureBaseline();
+      setStatus('运行模式已就绪：空场已自动采集，现在遮挡 16 格会发声');
+      updateUiState();
+    } catch (error) {
+      console.error(error);
+      setStatus('自动采集空场失败，请点击“采集空场”重试');
+      updateUiState();
+    }
+  }
 };
 
 const saveCurrentManualLayout = () => {
@@ -1467,7 +1489,7 @@ const mountCalibrationUi = () => {
 
   ui.cameraButton = createControlButton('开镜头', 'camera');
   ui.previewModeButton = createControlButton('进入运行', 'preview-mode');
-  ui.baselineButton = createControlButton('空场', 'baseline');
+  ui.baselineButton = createControlButton('采集空场', 'baseline');
   ui.resetButton = createControlButton('重标定', 'reset');
   ui.debugButton = createControlButton('调试', 'debug');
   ui.layoutButton = createControlButton('布局模式', 'layout');

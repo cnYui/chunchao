@@ -118,3 +118,56 @@ test('已占用格子被手遮挡时不会退出 occupied', () => {
   assert.equal(states[0].transition, null);
   assert.equal(states[0].reason, 'hand-overlap');
 });
+
+test('整屏公共变化不会让所有格子一起进入 occupied', () => {
+  const detector = createOccupancyDetector({
+    padCount: 4,
+    enterFrames: 1,
+    exitFrames: 1,
+    enterThreshold: 10,
+    exitThreshold: 4,
+  });
+
+  detector.setBaseline([
+    { brightness: 20, variance: 2, edgeDensity: 0.1 },
+    { brightness: 20, variance: 2, edgeDensity: 0.1 },
+    { brightness: 20, variance: 2, edgeDensity: 0.1 },
+    { brightness: 20, variance: 2, edgeDensity: 0.1 },
+  ]);
+
+  const states = detector.update([
+    { brightness: 35, variance: 6, edgeDensity: 0.2, overlapWithHand: 0 },
+    { brightness: 35, variance: 6, edgeDensity: 0.2, overlapWithHand: 0 },
+    { brightness: 35, variance: 6, edgeDensity: 0.2, overlapWithHand: 0 },
+    { brightness: 35, variance: 6, edgeDensity: 0.2, overlapWithHand: 0 },
+  ]);
+
+  assert.deepEqual(states.map((state) => state.status), ['empty', 'empty', 'empty', 'empty']);
+});
+
+test('只有局部显著高于公共变化的格子才会进入 occupied', () => {
+  const detector = createOccupancyDetector({
+    padCount: 4,
+    enterFrames: 1,
+    exitFrames: 1,
+    enterThreshold: 10,
+    exitThreshold: 4,
+  });
+
+  detector.setBaseline([
+    { brightness: 20, variance: 2, edgeDensity: 0.1 },
+    { brightness: 20, variance: 2, edgeDensity: 0.1 },
+    { brightness: 20, variance: 2, edgeDensity: 0.1 },
+    { brightness: 20, variance: 2, edgeDensity: 0.1 },
+  ]);
+
+  const states = detector.update([
+    { brightness: 35, variance: 6, edgeDensity: 0.2, overlapWithHand: 0 },
+    { brightness: 36, variance: 6.5, edgeDensity: 0.21, overlapWithHand: 0 },
+    { brightness: 78, variance: 20, edgeDensity: 0.6, overlapWithHand: 0 },
+    { brightness: 34, variance: 5.5, edgeDensity: 0.19, overlapWithHand: 0 },
+  ]);
+
+  assert.deepEqual(states.map((state) => state.status), ['empty', 'empty', 'occupied', 'empty']);
+  assert.deepEqual(states.map((state) => state.transition), [null, null, 'entered', null]);
+});

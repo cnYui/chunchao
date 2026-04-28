@@ -23,6 +23,16 @@ export const computeOccupancyScore = (
   );
 };
 
+const computeCommonModeScore = (scores) => {
+  if (scores.length < 4) {
+    return 0;
+  }
+
+  const sorted = [...scores].sort((left, right) => left - right);
+  const lowerQuartileIndex = Math.floor((sorted.length - 1) * 0.25);
+  return sorted[lowerQuartileIndex];
+};
+
 export const createOccupancyDetector = ({
   padCount,
   enterFrames,
@@ -50,6 +60,18 @@ export const createOccupancyDetector = ({
   };
 
   const update = (samples) => {
+    const rawScores = samples.map((sample, index) => {
+      const base = baseline[index];
+      const samplePixelCount = sample?.pixelCount ?? Number.POSITIVE_INFINITY;
+
+      if (!base || !sample || samplePixelCount < minPixelCount) {
+        return null;
+      }
+
+      return computeOccupancyScore(base, sample, scoreWeights);
+    });
+    const commonModeScore = computeCommonModeScore(rawScores.filter((score) => Number.isFinite(score)));
+
     return states.map((state, index) => {
       const sample = samples[index];
       const base = baseline[index];
@@ -80,7 +102,8 @@ export const createOccupancyDetector = ({
         };
       }
 
-      const score = computeOccupancyScore(base, sample, scoreWeights);
+      const rawScore = rawScores[index] ?? 0;
+      const score = Math.max(0, Number((rawScore - commonModeScore).toFixed(4)));
 
       if (state.status === 'empty') {
         if (!blockedByHand && score >= enterThreshold) {
@@ -108,6 +131,8 @@ export const createOccupancyDetector = ({
         status: state.status,
         transition: state.transition,
         score,
+        rawScore,
+        commonModeScore,
         reason: blockedByHand ? 'hand-overlap' : null,
       };
     });
