@@ -1,3 +1,11 @@
+import { createTimelineRefreshStore } from "./timeline-refresh-state.js";
+import {
+  getInteractionStep,
+  getTimelineSegment,
+  isLastTimelineSegment,
+  videoSegments,
+} from "./timeline-config.js";
+
 const scene = document.querySelector("#scene");
 const sceneStage = document.querySelector("#scene-stage");
 const scenes = Array.from(document.querySelectorAll(".scene"));
@@ -230,37 +238,13 @@ const scoreParticleState = {
   sourceContext: null,
   spriteCanvas: createScoreParticleSprite(),
 };
-const videoSegments = [
-  {
-    src: "./video/1a21117e4e7916df5b51a3864ea114a9_raw.mp4?v=20260425-newclips2",
-    interactionIndex: 0,
-    id: "video-part-1",
-  },
-  {
-    src: "./video/4577a95e9284af02d27603fb8d11bc3e_raw.mp4?v=20260425-newclips3",
-    interactionIndex: 1,
-    id: "video-part-2",
-  },
-  {
-    src: "./video/e1e4aa1ee14b1794a6d6d781f966be1a_raw.mp4?v=20260425-newclips4",
-    interactionIndex: null,
-    id: "video-part-3",
-  },
-];
-const interactionTimeline = [
-  {
-    sceneIndex: 1,
-    id: "bg2-score",
-  },
-  {
-    sceneIndex: 0,
-    id: "bg1-music",
-  },
-];
 const timelineState = {
   activeInteractionIndex: null,
   currentSegmentIndex: 0,
 };
+const timelineRefreshStore = createTimelineRefreshStore(
+  isVideoTimelineMode ? window.sessionStorage : null,
+);
 
 const videoVolumeState = {
   volume: 0.7,
@@ -599,15 +583,19 @@ const syncVideoSkipUi = () => {
   videoActions.setAttribute("aria-hidden", shouldShow ? "false" : "true");
 };
 
-const getInteractionStep = (interactionIndex) => {
-  return interactionTimeline[interactionIndex] ?? null;
-};
-
 const getCurrentVideoSegment = () => {
-  return videoSegments[timelineState.currentSegmentIndex] ?? null;
+  return getTimelineSegment(timelineState.currentSegmentIndex);
 };
 
-const isLastVideoSegment = () => timelineState.currentSegmentIndex >= videoSegments.length - 1;
+const isLastVideoSegment = () => isLastTimelineSegment(timelineState.currentSegmentIndex);
+
+const persistTimelineVideoStage = () => {
+  if (!isVideoTimelineMode || timelineState.activeInteractionIndex !== null) {
+    return;
+  }
+
+  timelineRefreshStore.saveVideoSegment(timelineState.currentSegmentIndex);
+};
 
 const setFinalStageVisible = (visible) => {
   document.body.classList.toggle("is-final-active", visible);
@@ -634,6 +622,8 @@ const setFinalStageVisible = (visible) => {
     if (finalFrame && !finalFrame.getAttribute("src")) {
       finalFrame.setAttribute("src", finalFrame.dataset.src ?? "./synthesizer.html");
     }
+
+    timelineRefreshStore.saveFinal();
   }
 };
 
@@ -675,10 +665,15 @@ const setVideoSegment = (segmentIndex) => {
   }
 
   syncVideoVolumeUi();
+  persistTimelineVideoStage();
 };
 
 const playReferenceVideo = async () => {
   if (!referenceVideo) {
+    return;
+  }
+
+  if (timelineState.activeInteractionIndex !== null || document.body.classList.contains("is-final-active")) {
     return;
   }
 
@@ -725,6 +720,11 @@ const openTimelineInteraction = (interactionIndex) => {
   referenceVideo?.pause();
   setPage(step.sceneIndex);
   setInteractionUiVisible(true);
+  timelineRefreshStore.saveInteraction({
+    segmentIndex: timelineState.currentSegmentIndex,
+    interactionIndex,
+    sceneIndex: step.sceneIndex,
+  });
   ensureHandTracking();
 
   requestAnimationFrame(() => {
@@ -780,12 +780,12 @@ const setupVideoPlayer = () => {
     return;
   }
 
+  const restoredStage = timelineRefreshStore.read();
+
   setFinalStageVisible(false);
   setInteractionUiVisible(false);
   referenceVideo.defaultMuted = true;
   syncVideoVolumeUi();
-  setVideoSegment(0);
-  syncVideoSkipUi();
 
   referenceVideo.addEventListener("loadedmetadata", () => {
     playReferenceVideo();
@@ -829,6 +829,42 @@ const setupVideoPlayer = () => {
     syncVideoVolumeUi();
   });
 
+  if (
+    restoredStage?.mode === "interaction" &&
+    videoSegments[restoredStage.segmentIndex] &&
+    getInteractionStep(restoredStage.interactionIndex)
+  ) {
+    const restoredStep = getInteractionStep(restoredStage.interactionIndex);
+    timelineState.activeInteractionIndex = restoredStage.interactionIndex;
+    setVideoSegment(restoredStage.segmentIndex);
+    setPage(restoredStep.sceneIndex);
+    setInteractionUiVisible(true);
+    ensureHandTracking();
+
+    requestAnimationFrame(() => {
+      measureScene();
+      rebuildScoreParticles();
+    });
+
+    return;
+  }
+
+  if (restoredStage?.mode === "final") {
+    setVideoSegment(videoSegments.length - 1);
+    setFinalStageVisible(true);
+    syncVideoSkipUi();
+    return;
+  }
+
+  if (restoredStage?.mode === "video" && videoSegments[restoredStage.segmentIndex]) {
+    setVideoSegment(restoredStage.segmentIndex);
+    syncVideoSkipUi();
+    playReferenceVideo();
+    return;
+  }
+
+  setVideoSegment(0);
+  syncVideoSkipUi();
   playReferenceVideo();
 };
 

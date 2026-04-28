@@ -12,9 +12,9 @@
 当前默认前端入口已临时切换为视频时间轴模式：
 
 - 当前顺播 3 段视频：
-  - `video/0baa12eb2ae33a003c103a1a1a269781_raw.mp4`
-  - `video/ab039202842864c33ee0cfe180f29e57_raw.mp4`
-  - `video/7b8e95fe6e49261b02e7e7d8c41b8601_raw.mp4`
+  - `video/1a21117e4e7916df5b51a3864ea114a9_raw.mp4`
+  - `video/4577a95e9284af02d27603fb8d11bc3e_raw.mp4`
+  - `video/e1e4aa1ee14b1794a6d6d781f966be1a_raw.mp4`
 - 第一段视频结束后插入 `bg2` 交互，第二段视频结束后插入 `bg1` 交互
 - 每个交互页面右上角都有“继续”按钮，点击后恢复下一段视频播放
 
@@ -34,6 +34,10 @@
 ├─ index.html
 ├─ styles.css
 ├─ main.js
+├─ timeline-config.js
+├─ timeline-refresh-state.js
+├─ synthesizer.html
+├─ synth/
 ├─ pic/
 ├─ video/
 └─ docs/ai/context/
@@ -43,39 +47,42 @@
 
 - `index.html`：场景结构和乐器默认摆位
 - `styles.css`：场景布局和视觉表现
-- `main.js`：输入源、手部识别接入和乐器运动逻辑
+- `main.js`：主页面编排、输入源、手部识别接入和交互场景逻辑
+- `timeline-config.js`：三段视频和交互插入顺序配置
+- `timeline-refresh-state.js`：视频时间轴刷新恢复状态
+- `synthesizer.html` / `synth/`：最终合成器展示页和运行模块
 - `pic/`：背景图和乐器素材
 - `video/`：视频素材
 - `docs/ai/context/`：项目上下文和设计记录
 
 ## 本地运行
 
-这是一个纯静态页面项目，不需要打包。
+当前项目使用最小 Vite 构建链路。
 
 但如果要启用摄像头手部识别，不能直接用 `file://` 打开，必须通过 `localhost` 或 `https` 访问。
 
 例如在项目目录执行：
 
 ```bash
-python -m http.server 8000
+npm run dev
 ```
 
 然后在浏览器打开：
 
 ```text
-http://localhost:8000
+http://127.0.0.1:8002
 ```
 
-如果只想快速看静态画面，直接打开 `index.html` 也可以，但这种方式下浏览器通常不会允许摄像头能力。
+如果只想快速看静态画面，直接打开 `index.html` 也可以，但这种方式下浏览器通常不会允许摄像头能力，最终合成器依赖的模块加载也不如本地服务稳定。
 
 ## 当前素材
 
 - 当前背景：`pic/bg1.png`
 - 备用背景：`pic/bg2.png`
-- 当前谱面图：`pic/score-transparent.png`
-- 当前时间轴视频 1：`video/0baa12eb2ae33a003c103a1a1a269781_raw.mp4`
-- 当前时间轴视频 2：`video/ab039202842864c33ee0cfe180f29e57_raw.mp4`
-- 当前时间轴视频 3：`video/7b8e95fe6e49261b02e7e7d8c41b8601_raw.mp4`
+- 当前谱面图：`pic/琴谱 new_transparent.png`
+- 当前时间轴视频 1：`video/1a21117e4e7916df5b51a3864ea114a9_raw.mp4`
+- 当前时间轴视频 2：`video/4577a95e9284af02d27603fb8d11bc3e_raw.mp4`
+- 当前时间轴视频 3：`video/e1e4aa1ee14b1794a6d6d781f966be1a_raw.mp4`
 - 乐器透明图：`pic/violin_transparent.png`
 - 乐器透明图：`pic/shuqin_transparent.png`
 - 乐器透明图：`pic/dianziqin_transparent.png`
