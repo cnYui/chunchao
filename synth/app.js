@@ -253,7 +253,7 @@ const stylePreviewElements = () => {
   };
 
   Object.assign(cameraPreview.style, sharedStyle, {
-    zIndex: '42',
+    zIndex: '30',
     display: state.cameraReady ? 'block' : 'none',
     objectFit: 'fill',
     border: '0',
@@ -263,11 +263,18 @@ const stylePreviewElements = () => {
   });
 
   Object.assign(debugCanvas.style, sharedStyle, {
-    zIndex: '43',
+    zIndex: '40',
     display: state.debugVisible && state.cameraReady ? 'block' : 'none',
     pointerEvents: 'none',
     border: '0',
     boxShadow: 'none',
+  });
+
+  Object.assign(calibrationLayer.style, {
+    position: 'absolute',
+    inset: '0',
+    zIndex: '50',
+    pointerEvents: 'none',
   });
 };
 

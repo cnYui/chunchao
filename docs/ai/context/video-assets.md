@@ -7,22 +7,20 @@
 - `video/` 下文件属于运行主资源，默认纳入版本管理
 - `video/*.mp4` 通过 Git LFS 提交，原因是部分运行视频超过 GitHub 普通 Git 单文件 100MB 限制
 
-## 本次新增素材
-
-- 源路径原先由用户提供为：
-  `D:\xwechat_files\wxid_4lkns2swsaad22_1df8\msg\video\2026-04\33bf26e484a3a504099f10ecbd2e8c13_raw.mp4`
-- 实际复制时该 `_raw` 文件已不存在
-- 同目录下存在标准导出的 `33bf26e484a3a504099f10ecbd2e8c13.mp4`
-- 当前已复制到项目：
-  `video/33bf26e484a3a504099f10ecbd2e8c13.mp4`
-
-## 后续新增素材
+## 当前保留素材
 
 - 当前前端时间轴实际引用已切换到 3 个视频：
   - 片段 1：`video/1a21117e4e7916df5b51a3864ea114a9_raw.mp4`
   - 片段 2：`video/4577a95e9284af02d27603fb8d11bc3e_raw.mp4`
   - 片段 3：`video/e1e4aa1ee14b1794a6d6d781f966be1a_raw.mp4`
-- 用户要求 `video/` 下后续只保留当前实际使用的 3 个视频，旧视频待删除确认后移除
+- 2026-04-28 已按代码实际引用清理 `video/`，当前目录只保留上述 3 个运行视频
+- 旧参考视频、旧物理分段和未引用 raw 视频已删除，原因是正式重构前要避免素材目录继续保留无效运行入口
+
+## 时间轴配置
+
+- 当前三段视频和两个交互插入点已抽离到 `timeline-config.js`
+- `main.js` 不再直接维护视频数组和交互顺序，原因是后续扩展第三交互场景时应只改配置和对应测试
+- `timeline-config.js` 使用 `new URL(..., import.meta.url).href` 引用视频，原因是 Vite 生产构建需要据此把三段 mp4 都纳入 `dist/assets/`
 
 ## 原因
 
