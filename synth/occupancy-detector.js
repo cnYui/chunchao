@@ -11,6 +11,13 @@ const defaultScoreWeights = {
   edgeDensity: 100,
 };
 
+const defaultEvidenceThresholds = {
+  brightnessDelta: 12,
+  varianceDelta: 2,
+  edgeDensityDelta: 0.045,
+  requiredSignals: 2,
+};
+
 export const computeOccupancyScore = (
   baseline,
   sample,
@@ -33,6 +40,24 @@ const computeCommonModeScore = (scores) => {
   return sorted[lowerQuartileIndex];
 };
 
+const computeFeatureDeltas = (baseline, sample) => {
+  return {
+    brightnessDelta: Math.abs((sample.brightness ?? 0) - (baseline.brightness ?? 0)),
+    varianceDelta: Math.abs((sample.variance ?? 0) - (baseline.variance ?? 0)),
+    edgeDensityDelta: Math.abs((sample.edgeDensity ?? 0) - (baseline.edgeDensity ?? 0)),
+  };
+};
+
+const hasStrongOccupancyEvidence = (deltas, thresholds = defaultEvidenceThresholds) => {
+  const signalCount = [
+    deltas.brightnessDelta >= thresholds.brightnessDelta,
+    deltas.varianceDelta >= thresholds.varianceDelta,
+    deltas.edgeDensityDelta >= thresholds.edgeDensityDelta,
+  ].filter(Boolean).length;
+
+  return signalCount >= thresholds.requiredSignals;
+};
+
 export const createOccupancyDetector = ({
   padCount,
   enterFrames,
@@ -42,6 +67,7 @@ export const createOccupancyDetector = ({
   maxHandOverlap = 0.35,
   minPixelCount = 12,
   scoreWeights = defaultScoreWeights,
+  evidenceThresholds = defaultEvidenceThresholds,
 }) => {
   const states = Array.from({ length: padCount }, createPadState);
   let baseline = [];
@@ -104,9 +130,11 @@ export const createOccupancyDetector = ({
 
       const rawScore = rawScores[index] ?? 0;
       const score = Math.max(0, Number((rawScore - commonModeScore).toFixed(4)));
+      const deltas = computeFeatureDeltas(base, sample);
+      const hasStrongEvidence = hasStrongOccupancyEvidence(deltas, evidenceThresholds);
 
       if (state.status === 'empty') {
-        if (!blockedByHand && score >= enterThreshold) {
+        if (!blockedByHand && hasStrongEvidence && score >= enterThreshold) {
           state.enterCount += 1;
           if (state.enterCount >= enterFrames) {
             state.status = 'occupied';
@@ -133,7 +161,7 @@ export const createOccupancyDetector = ({
         score,
         rawScore,
         commonModeScore,
-        reason: blockedByHand ? 'hand-overlap' : null,
+        reason: blockedByHand ? 'hand-overlap' : hasStrongEvidence ? null : 'weak-evidence',
       };
     });
   };

@@ -171,3 +171,22 @@ test('只有局部显著高于公共变化的格子才会进入 occupied', () =>
   assert.deepEqual(states.map((state) => state.status), ['empty', 'empty', 'occupied', 'empty']);
   assert.deepEqual(states.map((state) => state.transition), [null, null, 'entered', null]);
 });
+
+test('只有亮度轻微漂移但缺少结构变化时不会误判为 occupied', () => {
+  const detector = createOccupancyDetector({
+    padCount: 1,
+    enterFrames: 1,
+    exitFrames: 1,
+    enterThreshold: 18,
+    exitThreshold: 8,
+  });
+
+  detector.setBaseline([{ brightness: 20, variance: 2, edgeDensity: 0.1 }]);
+
+  const states = detector.update([
+    { brightness: 39, variance: 2.2, edgeDensity: 0.11, overlapWithHand: 0 },
+  ]);
+
+  assert.equal(states[0].status, 'empty');
+  assert.equal(states[0].transition, null);
+});
