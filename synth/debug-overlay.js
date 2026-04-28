@@ -22,7 +22,7 @@ export const createDebugOverlay = ({ canvas }) => {
       statusText = '',
     }) {
       context.clearRect(0, 0, canvas.width, canvas.height);
-      context.fillStyle = 'rgba(7, 10, 12, 0.08)';
+      context.fillStyle = 'rgba(7, 10, 12, 0.02)';
       context.fillRect(0, 0, canvas.width, canvas.height);
 
       calibrationPoints.forEach((point, index) => {

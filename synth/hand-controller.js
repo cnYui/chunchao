@@ -13,7 +13,43 @@ const defaultCreateLandmarker = async () => {
   });
 };
 
-export const createHandController = ({ createLandmarker = defaultCreateLandmarker } = {}) => {
+const inactiveHandState = () => ({
+  active: false,
+  handedness: 'Unknown',
+  confidence: 0,
+  points: [],
+  normalizedPoints: [],
+  controlPoint: null,
+  hands: [],
+});
+
+const getHandedness = (result, index) => {
+  return result.handednesses?.[index]?.[0] ?? result.handedness?.[index]?.[0] ?? null;
+};
+
+const toScreenPoint = (point, scaleX, scaleY) => ({
+  x: point.x * scaleX,
+  y: point.y * scaleY,
+});
+
+const toHandCandidate = ({ landmarks, handedness, scaleX, scaleY }) => {
+  const points = landmarks.map((point) => toScreenPoint(point, scaleX, scaleY));
+  const confidence = handedness?.score ?? 1;
+
+  return {
+    active: points.length > 0,
+    handedness: handedness?.categoryName ?? 'Unknown',
+    confidence,
+    points,
+    normalizedPoints: landmarks,
+    controlPoint: points[8] ?? points[4] ?? points[0] ?? null,
+  };
+};
+
+export const createHandController = ({
+  createLandmarker = defaultCreateLandmarker,
+  minConfidence = 0.45,
+} = {}) => {
   let handLandmarker = null;
 
   return {
@@ -22,29 +58,30 @@ export const createHandController = ({ createLandmarker = defaultCreateLandmarke
     },
     detect({ video, now }) {
       if (!handLandmarker || !video) {
-        return {
-          active: false,
-          handedness: 'Unknown',
-          points: [],
-          normalizedPoints: [],
-        };
+        return inactiveHandState();
       }
 
       const result = handLandmarker.detectForVideo(video, now);
-      const rawPoints = result.landmarks?.[0] ?? [];
-      const handedness = result.handednesses?.[0]?.[0]?.categoryName ?? 'Unknown';
       const scaleX = video.videoWidth || 1;
       const scaleY = video.videoHeight || 1;
-      const points = rawPoints.map((point) => ({
-        x: point.x * scaleX,
-        y: point.y * scaleY,
-      }));
+      const hands = (result.landmarks ?? [])
+        .map((landmarks, index) => toHandCandidate({
+          landmarks,
+          handedness: getHandedness(result, index),
+          scaleX,
+          scaleY,
+        }))
+        .filter((hand) => hand.active && hand.confidence >= minConfidence)
+        .sort((left, right) => right.confidence - left.confidence);
+
+      const primaryHand = hands[0];
+      if (!primaryHand) {
+        return inactiveHandState();
+      }
 
       return {
-        active: points.length > 0,
-        handedness,
-        points,
-        normalizedPoints: rawPoints,
+        ...primaryHand,
+        hands,
       };
     },
   };
