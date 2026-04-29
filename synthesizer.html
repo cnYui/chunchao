@@ -571,15 +571,21 @@
     </div>
 </div>
 
-<div id="camera-monitor-panel" class="stage-panel fixed right-6 bottom-6 z-40 overflow-hidden rounded-lg" style="width: min(34vw, 460px); height: min(30vh, 280px); min-width: 320px; min-height: 220px;">
-    <div class="stage-screen-base absolute inset-0 opacity-78"></div>
-    <div class="stage-screen-grid absolute inset-0 opacity-35"></div>
+<div id="camera-monitor-panel" class="stage-panel fixed inset-0 z-[120] overflow-hidden rounded-none" style="width: 100vw; height: 100vh; background: transparent; border: 0; box-shadow: none; backdrop-filter: none;">
+    <div class="stage-screen-base absolute inset-0" style="opacity: 0.08;"></div>
+    <div class="stage-screen-grid absolute inset-0" style="opacity: 0.12;"></div>
     <div class="absolute top-2 left-3 z-10 font-label-sm tracking-widest uppercase opacity-70 text-[9px]">CAM PREVIEW</div>
     <div class="absolute top-2 right-3 z-10 font-label-sm tracking-widest uppercase opacity-55 text-[9px]">CALIBRATE</div>
     <div id="synth-calibration-layer" class="pointer-events-none absolute inset-0 z-20"></div>
     <canvas id="synth-debug-canvas" class="pointer-events-none absolute inset-0 z-30"></canvas>
     <video id="synth-camera-preview" class="hidden" playsinline muted></video>
 </div>
+
+<aside id="synth-hand-preview-panel" aria-label="手部识别预览" class="fixed right-4 bottom-4 z-[140] overflow-hidden rounded-[18px] border border-[#f7d7c34a] bg-[rgba(8,6,7,0.78)] shadow-[0_18px_48px_rgba(0,0,0,0.34)] backdrop-blur-md pointer-events-none" style="width: min(24vw, 256px); aspect-ratio: 16 / 9;">
+    <div class="absolute top-2 left-3 z-10 font-label-sm tracking-widest uppercase opacity-70 text-[9px]">HAND TRACK</div>
+    <video id="synth-hand-preview-video" class="absolute inset-0 h-full w-full bg-black/40 object-cover" autoplay muted playsinline></video>
+    <canvas id="synth-hand-preview-overlay" class="absolute inset-0 h-full w-full" aria-hidden="true"></canvas>
+</aside>
 
 <script type="module" src="./synth/app.js?v=20260426-projection-runtime"></script>
 </body>

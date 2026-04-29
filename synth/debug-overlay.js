@@ -18,11 +18,11 @@ export const createDebugOverlay = ({ canvas }) => {
       calibrationPoints = [],
       handPoint = null,
       controlRects = [],
-      baselineReady = false,
+      interactionReady = false,
       statusText = '',
     }) {
       context.clearRect(0, 0, canvas.width, canvas.height);
-      context.fillStyle = 'rgba(7, 10, 12, 0.08)';
+      context.fillStyle = 'rgba(7, 10, 12, 0.02)';
       context.fillRect(0, 0, canvas.width, canvas.height);
 
       calibrationPoints.forEach((point, index) => {
@@ -61,9 +61,9 @@ export const createDebugOverlay = ({ canvas }) => {
         context.fill();
       }
 
-      context.fillStyle = baselineReady ? '#8efca1' : '#ffd49b';
+      context.fillStyle = interactionReady ? '#8efca1' : '#ffd49b';
       context.font = '12px sans-serif';
-      context.fillText(baselineReady ? 'BASELINE READY' : 'BASELINE WAITING', 12, 18);
+      context.fillText(interactionReady ? 'FINGER MODE READY' : 'ALIGN MODE', 12, 18);
 
       if (statusText) {
         context.fillStyle = '#f7d9c3';
