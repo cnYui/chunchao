@@ -3,10 +3,15 @@ import test from 'node:test';
 
 import { createSynthRouter } from '../../synth/synth-router.js';
 
-test('router 会把占格进入与退出路由到声音引擎', () => {
+test('router 会按当前状态切换 pad 的启停', () => {
   const calls = [];
   const router = createSynthRouter({
     audioEngine: {
+      getControlState() {
+        return {
+          occupied: [false],
+        };
+      },
       startPadVoice(id) {
         calls.push(`start:${id}`);
       },
@@ -17,13 +22,13 @@ test('router 会把占格进入与退出路由到声音引擎', () => {
     uiControls: {
       setKnobAngle() {},
       setSliderValue() {},
+      setPadActive() {},
     },
   });
 
-  router.applyOccupancyStates([{ status: 'occupied', transition: 'entered' }]);
-  router.applyOccupancyStates([{ status: 'empty', transition: 'exited' }]);
+  router.togglePad(0);
 
-  assert.deepEqual(calls, ['start:0', 'stop:0']);
+  assert.deepEqual(calls, ['start:0']);
 });
 
 test('router 会把手部输入路由到控件层', () => {
@@ -33,6 +38,11 @@ test('router 会把手部输入路由到控件层', () => {
   const audioSliderCalls = [];
   const router = createSynthRouter({
     audioEngine: {
+      getControlState() {
+        return {
+          occupied: [],
+        };
+      },
       startPadVoice() {},
       stopPadVoice() {},
       setKnobAngle(angle) {
@@ -49,6 +59,7 @@ test('router 会把手部输入路由到控件层', () => {
       setSliderValue(key, value) {
         sliderCalls.push([key, value]);
       },
+      setPadActive() {},
     },
   });
 
@@ -72,10 +83,47 @@ test('router 会把手部输入路由到控件层', () => {
   ]);
 });
 
-test('router 只在状态边沿触发 start 与 stop', () => {
+test('router 会同步 pad 激活态到界面层', () => {
   const calls = [];
   const router = createSynthRouter({
     audioEngine: {
+      getControlState() {
+        return {
+          occupied: [],
+        };
+      },
+      startPadVoice() {},
+      stopPadVoice() {},
+      setKnobAngle() {},
+      setSliderValue() {},
+    },
+    uiControls: {
+      setKnobAngle() {},
+      setSliderValue() {},
+      setPadActive(index, active) {
+        calls.push([index, active]);
+      },
+    },
+  });
+
+  router.syncPadStates([true, false, true]);
+
+  assert.deepEqual(calls, [
+    [0, true],
+    [1, false],
+    [2, true],
+  ]);
+});
+
+test('router 在已激活 pad 上再次点击时会停止声音', () => {
+  const calls = [];
+  const router = createSynthRouter({
+    audioEngine: {
+      getControlState() {
+        return {
+          occupied: [true],
+        };
+      },
       startPadVoice(id) {
         calls.push(`start:${id}`);
       },
@@ -88,14 +136,11 @@ test('router 只在状态边沿触发 start 与 stop', () => {
     uiControls: {
       setKnobAngle() {},
       setSliderValue() {},
+      setPadActive() {},
     },
   });
 
-  router.applyOccupancyStates([
-    { status: 'occupied', transition: 'entered' },
-    { status: 'occupied', transition: null },
-    { status: 'empty', transition: 'exited' },
-  ]);
+  router.togglePad(0);
 
-  assert.deepEqual(calls, ['start:0', 'stop:2']);
+  assert.deepEqual(calls, ['stop:0']);
 });

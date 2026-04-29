@@ -1,14 +1,22 @@
 export const createSynthRouter = ({ audioEngine, uiControls }) => {
   return {
-    applyOccupancyStates(states) {
-      states.forEach((state, index) => {
-        if (state.transition === 'entered') {
-          audioEngine.startPadVoice(index);
-        }
+    togglePad(index) {
+      const currentState = audioEngine.getControlState?.();
+      const occupied = currentState?.occupied ?? [];
+      const nextActive = !Boolean(occupied[index]);
 
-        if (state.transition === 'exited') {
-          audioEngine.stopPadVoice(index);
-        }
+      if (nextActive) {
+        audioEngine.startPadVoice(index);
+      } else {
+        audioEngine.stopPadVoice(index);
+      }
+
+      uiControls.setPadActive?.(index, nextActive);
+      return nextActive;
+    },
+    syncPadStates(states) {
+      states.forEach((active, index) => {
+        uiControls.setPadActive?.(index, active);
       });
     },
     applyHandInput({ knobAngle, sliders }) {

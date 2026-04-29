@@ -9,7 +9,7 @@ export const resolvePreviewPresentation = (mode) => {
       showCameraFeed: false,
       showGuideOverlay: false,
       showDebugOverlay: false,
-      allowBaselineCapture: true,
+      allowFingerInput: true,
     };
   }
 
@@ -17,11 +17,10 @@ export const resolvePreviewPresentation = (mode) => {
     showCameraFeed: true,
     showGuideOverlay: true,
     showDebugOverlay: true,
-    allowBaselineCapture: false,
+    allowFingerInput: false,
   };
 };
 
 export const togglePreviewMode = (mode) => {
   return mode === previewModes.run ? previewModes.align : previewModes.run;
 };
-

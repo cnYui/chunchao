@@ -1,4 +1,6 @@
-const defaultCreateLandmarker = async () => {
+const defaultCreateLandmarker = async ({
+  numHands = 1,
+} = {}) => {
   const vision = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/vision_bundle.mjs');
   const fileset = await vision.FilesetResolver.forVisionTasks(
     'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm',
@@ -9,7 +11,10 @@ const defaultCreateLandmarker = async () => {
       modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
     },
     runningMode: 'VIDEO',
-    numHands: 2,
+    numHands,
+    minHandDetectionConfidence: 0.55,
+    minHandPresenceConfidence: 0.45,
+    minTrackingConfidence: 0.45,
   });
 };
 
@@ -35,30 +40,51 @@ const toScreenPoint = (point, scaleX, scaleY) => ({
 const toHandCandidate = ({ landmarks, handedness, scaleX, scaleY }) => {
   const points = landmarks.map((point) => toScreenPoint(point, scaleX, scaleY));
   const confidence = handedness?.score ?? 1;
+  const controlPoint = points[8] ?? null;
 
   return {
-    active: points.length > 0,
+    active: Boolean(controlPoint),
     handedness: handedness?.categoryName ?? 'Unknown',
     confidence,
     points,
     normalizedPoints: landmarks,
-    controlPoint: points[8] ?? points[4] ?? points[0] ?? null,
+    controlPoint,
   };
 };
 
 export const createHandController = ({
   createLandmarker = defaultCreateLandmarker,
   minConfidence = 0.45,
+  preferredHandedness = 'Right',
+  predictionIntervalMs = 1000 / 24,
 } = {}) => {
   let handLandmarker = null;
+  let lastVideoTime = -1;
+  let lastPredictAt = 0;
+  let lastState = inactiveHandState();
 
   return {
     async start() {
-      handLandmarker = await createLandmarker();
+      handLandmarker = await createLandmarker({
+        numHands: 1,
+      });
+      lastVideoTime = -1;
+      lastPredictAt = 0;
+      lastState = inactiveHandState();
     },
     detect({ video, now }) {
       if (!handLandmarker || !video) {
         return inactiveHandState();
+      }
+
+      const currentVideoTime = Number.isFinite(video.currentTime) ? video.currentTime : null;
+      const shouldReuseLastState = (
+        (currentVideoTime !== null && currentVideoTime === lastVideoTime)
+        || (now - lastPredictAt < predictionIntervalMs)
+      );
+
+      if (shouldReuseLastState) {
+        return lastState;
       }
 
       const result = handLandmarker.detectForVideo(video, now);
@@ -71,18 +97,28 @@ export const createHandController = ({
           scaleX,
           scaleY,
         }))
-        .filter((hand) => hand.active && hand.confidence >= minConfidence)
+        .filter((hand) => {
+          return hand.active
+            && hand.confidence >= minConfidence
+            && hand.handedness === preferredHandedness;
+        })
         .sort((left, right) => right.confidence - left.confidence);
 
       const primaryHand = hands[0];
       if (!primaryHand) {
-        return inactiveHandState();
+        lastPredictAt = now;
+        lastVideoTime = currentVideoTime ?? lastVideoTime;
+        lastState = inactiveHandState();
+        return lastState;
       }
 
-      return {
+      lastPredictAt = now;
+      lastVideoTime = currentVideoTime ?? lastVideoTime;
+      lastState = {
         ...primaryHand,
         hands,
       };
+      return lastState;
     },
   };
 };

@@ -6,8 +6,9 @@ import { createBrowserStrudelRuntime } from './strudel-browser.js';
 import { calibrationMarkerLayout, getCalibrationMarkerState } from './calibration-markers.js';
 import { createCameraController } from './camera-controller.js';
 import { createDebugOverlay } from './debug-overlay.js';
+import { createFingerPadTrigger } from './finger-pad-trigger.js';
 import { createHandController } from './hand-controller.js';
-import { createHandBounds, mapPointToKnobAngle, mapPointToSliderValue } from './hand-math.js';
+import { mapPointToKnobAngle, mapPointToSliderValue } from './hand-math.js';
 import {
   buildEmptyManualLayoutDraft,
   manualLayoutSteps,
@@ -21,15 +22,13 @@ import {
   loadManualLayout,
   saveManualLayout,
 } from './manual-layout-storage.js';
-import { createOccupancyDetector } from './occupancy-detector.js';
 import {
   previewModes,
   resolvePreviewPresentation,
   togglePreviewMode,
 } from './preview-mode.js';
 import { createProjectiveTransform, mapDomRectToQuad } from './projection-calibration.js';
-import { computeMaskedFeatureFromImageData, getQuadBounds } from './roi-sampling.js';
-import { shouldAutoCaptureBaselineOnModeChange } from './roi-runtime-flow.js';
+import { getQuadBounds } from './roi-sampling.js';
 import { getGridCellPatternKey, gridPatternKeys } from './strudel-score.js';
 import { createSynthRouter } from './synth-router.js';
 import { createUiControls } from './ui-controls.js';
@@ -51,14 +50,12 @@ const handPreviewVideo = document.querySelector('#synth-hand-preview-video');
 const handPreviewOverlay = document.querySelector('#synth-hand-preview-overlay');
 const handPreviewContext = handPreviewOverlay?.getContext('2d');
 
-const handConnections = [
-  [0, 1], [1, 2], [2, 3], [3, 4],
-  [0, 5], [5, 6], [6, 7], [7, 8],
-  [5, 9], [9, 10], [10, 11], [11, 12],
-  [9, 13], [13, 14], [14, 15], [15, 16],
-  [13, 17], [17, 18], [18, 19], [19, 20],
-  [0, 17],
+const fingerPreviewConnections = [
+  [5, 6],
+  [6, 7],
+  [7, 8],
 ];
+const fingerPreviewPointIndices = [5, 6, 7, 8];
 const handColors = {
   Left: {
     stroke: 'rgba(255, 182, 120, 0.9)',
@@ -113,17 +110,10 @@ const cameraController = createCameraController({
 });
 const handController = createHandController();
 const debugOverlay = createDebugOverlay({ canvas: debugCanvas });
-const occupancyDetector = createOccupancyDetector({
-  padCount,
-  enterFrames: 10,
-  exitFrames: 8,
-  enterThreshold: 18,
-  exitThreshold: 8,
-  maxHandOverlap: 0.38,
+const padFingerTrigger = createFingerPadTrigger({
+  activateFrames: 4,
 });
 
-const analysisCanvas = document.createElement('canvas');
-const analysisContext = analysisCanvas.getContext('2d', { willReadFrequently: true });
 const storedManualLayout = loadManualLayout();
 const validatedStoredManualLayout = validateManualLayout(storedManualLayout).ok
   ? storedManualLayout
@@ -139,7 +129,7 @@ const state = {
   padRois: [],
   knobRect: null,
   sliderRects: {},
-  baselineReady: false,
+  padStates: Array.from({ length: padCount }, () => false),
   manualLayout: validatedStoredManualLayout,
   runtimeManualLayout: null,
   useViewportGuide: true,
@@ -149,10 +139,6 @@ const state = {
   manualLayoutDraft: buildEmptyManualLayoutDraft(),
   layoutDrawingRect: null,
   layoutPointerStart: null,
-  occupancyStates: Array.from({ length: padCount }, () => ({
-    status: 'empty',
-    transition: null,
-  })),
   loopStarted: false,
 };
 
@@ -372,75 +358,20 @@ const isPointInRect = (point, rect) => {
 };
 
 const getControlPoint = (handState) => {
-  if (!handState?.active) {
-    return null;
-  }
-
-  if (handState.controlPoint) {
-    return handState.controlPoint;
-  }
-
-  return handState.points[8] ?? handState.points[4] ?? handState.points[0] ?? null;
+  return handState?.active ? handState.controlPoint ?? null : null;
 };
 
-const averageFeatures = (frames) => {
-  if (!frames.length) {
-    return [];
-  }
-
-  return frames[0].map((_, index) => {
-    const totals = frames.reduce((accumulator, frame) => {
-      const sample = frame[index];
-      accumulator.brightness += sample.brightness;
-      accumulator.variance += sample.variance;
-      accumulator.edgeDensity += sample.edgeDensity;
-      accumulator.overlapWithHand += sample.overlapWithHand;
-      return accumulator;
-    }, {
-      brightness: 0,
-      variance: 0,
-      edgeDensity: 0,
-      overlapWithHand: 0,
-    });
-
-    return {
-      brightness: Number((totals.brightness / frames.length).toFixed(4)),
-      variance: Number((totals.variance / frames.length).toFixed(4)),
-      edgeDensity: Number((totals.edgeDensity / frames.length).toFixed(4)),
-      overlapWithHand: Number((totals.overlapWithHand / frames.length).toFixed(4)),
-    };
-  });
+const getPadStates = () => {
+  return strudelAdapter.getControlState().occupied.map(Boolean);
 };
 
-const computeFeatureForQuad = (video, quad, handBounds) => {
-  const bounds = getQuadBounds(quad);
-  const left = Math.max(0, Math.floor(bounds.left));
-  const top = Math.max(0, Math.floor(bounds.top));
-  const width = Math.max(8, Math.min(video.videoWidth - left, Math.ceil(bounds.right - left)));
-  const height = Math.max(8, Math.min(video.videoHeight - top, Math.ceil(bounds.bottom - top)));
-
-  analysisCanvas.width = width;
-  analysisCanvas.height = height;
-  analysisContext.drawImage(video, left, top, width, height, 0, 0, width, height);
-
-  const { data } = analysisContext.getImageData(0, 0, width, height);
-  return computeMaskedFeatureFromImageData({
-    data,
-    width,
-    height,
-    offsetX: left,
-    offsetY: top,
-    quad,
-    handBounds,
-  });
-};
-
-const samplePadFeatures = (video, rois, handBounds) => {
-  return rois.map((quad) => computeFeatureForQuad(video, quad, handBounds));
+const syncPadState = () => {
+  state.padStates = getPadStates();
+  router.syncPadStates(state.padStates);
 };
 
 const buildWaveform = (now = performance.now()) => {
-  const activeCount = state.occupancyStates.filter((item) => item.status === 'occupied').length;
+  const activeCount = state.padStates.filter(Boolean).length;
 
   return Uint8Array.from({ length: 16 }, (_, index) => {
     const base = activeCount > 0 ? 46 : 12;
@@ -632,10 +563,8 @@ const updateUiState = () => {
   const showCalibrationGuides = !state.useViewportGuide && !state.layoutMode && !state.manualLayout;
 
   if (ui.baselineButton) {
-    ui.baselineButton.disabled = !state.cameraReady
-      || state.layoutMode
-      || !previewPresentation.allowBaselineCapture
-      || activeGeometry.padRois.length !== padCount;
+    ui.baselineButton.style.display = 'none';
+    ui.baselineButton.disabled = true;
   }
 
   if (ui.debugButton) {
@@ -682,9 +611,7 @@ const updateUiState = () => {
       if (state.previewMode === previewModes.align) {
         ui.hintText.textContent = '对位模式：调整摄像头，让半透明画面和触发框与下方合成器重合；完成后切到运行模式';
       } else {
-        ui.hintText.textContent = state.baselineReady
-          ? '运行模式：ROI 已启动，遮挡右侧 16 格会直接触发声音'
-          : '运行模式：正在等待空场完成，未完成前 16 格不会发声';
+        ui.hintText.textContent = '运行模式：只识别右手食指；右侧 16 格点击切换发声，左侧旋钮和滑杆可直接拖动';
       }
     } else if (state.layoutMode) {
       ui.hintText.textContent = currentStep
@@ -693,15 +620,11 @@ const updateUiState = () => {
     } else if (!state.cameraReady) {
       ui.hintText.textContent = '先启用摄像头';
     } else if (state.manualLayout) {
-      ui.hintText.textContent = state.baselineReady
-        ? '运行中：手工布局已生效，方块占格发声，手指调节旋钮和滑杆'
-        : '手工布局已加载，保持 16 格为空后点击采集空场';
+      ui.hintText.textContent = '手工布局已加载，可切到运行模式后使用右手食指点击和拖动';
     } else if (state.calibrationPoints.length < 4) {
       ui.hintText.textContent = `请在右下预览中依次点击 ${calibrationOrder[state.calibrationPoints.length]}`;
-    } else if (!state.baselineReady) {
-      ui.hintText.textContent = '标定完成，保持 16 格为空后点击采集空场';
     } else {
-      ui.hintText.textContent = '运行中：方块占格发声，手指调节旋钮和滑杆';
+      ui.hintText.textContent = '标定完成，可切到运行模式后使用右手食指点击和拖动';
     }
   }
 
@@ -874,16 +797,11 @@ const syncManualLayoutRuntime = () => {
   });
 };
 
-const clearOccupancyRuntime = () => {
-  occupancyDetector.reset();
+const clearPadPlayback = () => {
+  padFingerTrigger.reset();
   strudelAdapter.stopAllVoices();
-  state.occupancyStates = state.occupancyStates.map(() => ({
-    status: 'empty',
-    transition: null,
-  }));
-  uiControls.getPadElements().forEach((_, index) => {
-    uiControls.setPadActive(index, false);
-  });
+  state.padStates = Array.from({ length: padCount }, () => false);
+  router.syncPadStates(state.padStates);
 };
 
 const resetLayoutDraft = () => {
@@ -902,7 +820,7 @@ const enterLayoutMode = () => {
 
   state.layoutMode = true;
   resetLayoutDraft();
-  clearOccupancyRuntime();
+  clearPadPlayback();
   setStatus('布局模式：请从 Pad 1 开始依次绘制');
   stylePreviewElements();
   updateUiState();
@@ -953,37 +871,21 @@ const clearLayoutDraft = () => {
   updateUiState();
 };
 
-const cyclePreviewMode = async () => {
+const cyclePreviewMode = () => {
   state.previewMode = togglePreviewMode(state.previewMode);
-  const activeGeometry = getActiveGeometry();
-  const shouldAutoCapture = shouldAutoCaptureBaselineOnModeChange({
-    nextPreviewMode: state.previewMode,
-    baselineReady: state.baselineReady,
-    geometryReady: activeGeometry.padRois.length === padCount,
-  });
+
+  if (state.previewMode === previewModes.align) {
+    clearPadPlayback();
+  }
 
   setStatus(
     state.previewMode === previewModes.align
       ? '已切回对位模式，请继续调整摄像头与触发图'
-      : shouldAutoCapture
-        ? '已进入运行模式，正在自动采集空场，请保持 16 格为空'
-        : '已进入运行模式，实时回显已隐藏，可直接开始识别',
+      : '已进入运行模式，可用右手食指点击 16 格并拖动左侧控件',
   );
   stylePreviewElements();
   updateUiState();
   renderDebug();
-
-  if (shouldAutoCapture) {
-    try {
-      await captureBaseline();
-      setStatus('运行模式已就绪：空场已自动采集，现在遮挡 16 格会发声');
-      updateUiState();
-    } catch (error) {
-      console.error(error);
-      setStatus('自动采集空场失败，请点击“采集空场”重试');
-      updateUiState();
-    }
-  }
 };
 
 const saveCurrentManualLayout = () => {
@@ -1001,12 +903,11 @@ const saveCurrentManualLayout = () => {
   state.manualLayout = structuredClone(state.manualLayoutDraft);
   saveManualLayout(globalThis.localStorage, state.manualLayout);
   state.layoutMode = false;
-  state.baselineReady = false;
   state.layoutDrawingRect = null;
   state.layoutPointerStart = null;
   syncManualLayoutRuntime();
-  clearOccupancyRuntime();
-  setStatus('手工布局已保存，请保持 16 格为空后点击采集空场');
+  clearPadPlayback();
+  setStatus('手工布局已保存，可切到运行模式后用右手食指点击和拖动');
   stylePreviewElements();
   updateUiState();
 };
@@ -1017,32 +918,8 @@ const resetCalibration = () => {
   state.padRois = [];
   state.knobRect = null;
   state.sliderRects = {};
-  state.baselineReady = false;
-  clearOccupancyRuntime();
+  clearPadPlayback();
   setStatus(state.manualLayout ? '已清空四点标定，当前仍优先使用手工布局' : '请在预览中重新点击四个角点');
-  updateUiState();
-};
-
-const captureBaseline = async () => {
-  const activeGeometry = getActiveGeometry();
-
-  if (!state.cameraReady || activeGeometry.padRois.length !== padCount) {
-    return;
-  }
-
-  state.baselineReady = false;
-  clearOccupancyRuntime();
-  setStatus('正在采集空场 baseline');
-  const frames = [];
-
-  for (let index = 0; index < 12; index += 1) {
-    await new Promise((resolve) => requestAnimationFrame(resolve));
-    frames.push(samplePadFeatures(cameraPreview, activeGeometry.padRois, null));
-  }
-
-  occupancyDetector.setBaseline(averageFeatures(frames));
-  state.baselineReady = true;
-  setStatus('运行中');
   updateUiState();
 };
 
@@ -1162,7 +1039,7 @@ const handleCalibrationClick = (event) => {
   state.calibrationPoints = [...state.calibrationPoints, getVideoPointFromEvent(event)];
   if (state.calibrationPoints.length === 4) {
     syncProjectionGeometry();
-    setStatus('标定完成，请保持 16 格为空并点击采集空场');
+    setStatus('标定完成，可切到运行模式后用右手食指交互');
   } else {
     setStatus(`已记录 ${state.calibrationPoints.length} 个点`);
   }
@@ -1170,17 +1047,28 @@ const handleCalibrationClick = (event) => {
   updateUiState();
 };
 
-const applyHandControl = (point) => {
+const applyFingerInteraction = (point) => {
   const activeGeometry = getActiveGeometry();
+  const previewPresentation = getPreviewPresentation();
 
-  if (!point || state.layoutMode || !activeGeometry.vibeRect) {
+  if (!point || state.layoutMode || !previewPresentation.allowFingerInput) {
+    padFingerTrigger.reset();
     return;
   }
 
   const sliders = {};
   let knobAngle = null;
+  const triggeredPadIndex = padFingerTrigger.update({
+    point,
+    padRois: activeGeometry.padRois,
+  });
 
-  if (isPointInRect(point, expandRect(activeGeometry.vibeRect, 26))) {
+  if (Number.isInteger(triggeredPadIndex)) {
+    router.togglePad(triggeredPadIndex);
+    syncPadState();
+  }
+
+  if (activeGeometry.vibeRect && isPointInRect(point, expandRect(activeGeometry.vibeRect, 26))) {
     knobAngle = mapPointToKnobAngle(point, activeGeometry.vibeRect);
   }
 
@@ -1209,11 +1097,11 @@ const renderDebug = (handPoint = null) => {
   debugOverlay.resize(cameraPreview.videoWidth, cameraPreview.videoHeight);
   debugOverlay.render({
     rois: activeGeometry.padRois,
-    occupied: state.occupancyStates.map((item) => item.status === 'occupied'),
+    occupied: state.padStates,
     calibrationPoints: state.calibrationPoints,
     handPoint,
     controlRects: activeGeometry.controlRects,
-    baselineReady: state.baselineReady,
+    interactionReady: getPreviewPresentation().allowFingerInput,
     statusText: state.status,
   });
 };
@@ -1263,9 +1151,14 @@ const drawHandConnection = (context, landmarks, fromIndex, toIndex, color, width
 };
 
 const drawHandPoints = (context, landmarks, color, width, height) => {
-  landmarks.forEach((landmark) => {
+  fingerPreviewPointIndices.forEach((index) => {
+    const landmark = landmarks[index];
+    if (!landmark) {
+      return;
+    }
+
     context.beginPath();
-    context.arc(landmark.x * width, landmark.y * height, 3.2, 0, Math.PI * 2);
+    context.arc(landmark.x * width, landmark.y * height, index === 8 ? 4.2 : 3.2, 0, Math.PI * 2);
     context.fillStyle = color.fill;
     context.fill();
   });
@@ -1308,7 +1201,7 @@ const renderHandPreview = (handState) => {
 
   previewHands.forEach(({ handedness, landmarks }) => {
     const color = handColors[handedness] ?? handColors.Unknown;
-    handConnections.forEach(([fromIndex, toIndex]) => {
+    fingerPreviewConnections.forEach(([fromIndex, toIndex]) => {
       drawHandConnection(handPreviewContext, landmarks, fromIndex, toIndex, color, width, height);
     });
     drawHandPoints(handPreviewContext, landmarks, color, width, height);
@@ -1327,24 +1220,12 @@ const wirePadFallback = () => {
     pad.title = label;
     pad.setAttribute('aria-label', `Pad ${index + 1} ${label}`);
 
-    const stop = () => {
-      strudelAdapter.stopPadVoice(index);
-      if (!state.baselineReady) {
-        uiControls.setPadActive(index, false);
-      }
-    };
-
     pad.addEventListener('pointerdown', async (event) => {
       event.preventDefault();
       await strudelRuntime.ensureReady().catch(() => undefined);
-      strudelAdapter.startPadVoice(index);
-      if (!state.baselineReady) {
-        uiControls.setPadActive(index, true);
-      }
+      router.togglePad(index);
+      syncPadState();
     });
-    pad.addEventListener('pointerup', stop);
-    pad.addEventListener('pointerleave', stop);
-    pad.addEventListener('pointercancel', stop);
   });
 };
 
@@ -1440,11 +1321,12 @@ const startCamera = async () => {
   state.cameraReady = true;
   state.handReady = true;
   syncManualLayoutRuntime();
+  syncPadState();
   setStatus(
     state.useViewportGuide
       ? '自动触发图已启动，请调整摄像头让覆盖框和下方合成器对齐'
       : state.manualLayout
-        ? '已加载手工布局，请采集空场'
+        ? '已加载手工布局，可切到运行模式后用右手食指交互'
         : '请在预览中依次点击 左上 / 右上 / 右下 / 左下',
   );
   updateUiState();
@@ -1454,26 +1336,13 @@ const startCamera = async () => {
 
 const loop = (now) => {
   if (state.cameraReady && state.handReady && cameraPreview.readyState >= 2) {
-    const activeGeometry = getActiveGeometry();
-    uiControls.setWaveform(buildWaveform(now));
     const handState = handController.detect({
       video: cameraPreview,
       now,
     });
     const handPoint = getControlPoint(handState);
-    const handBounds = handState.active ? createHandBounds(handState.points, 28) : null;
-
-    if (!state.layoutMode && state.baselineReady && activeGeometry.padRois.length === padCount) {
-      const features = samplePadFeatures(cameraPreview, activeGeometry.padRois, handBounds);
-
-      state.occupancyStates = occupancyDetector.update(features);
-      router.applyOccupancyStates(state.occupancyStates);
-      state.occupancyStates.forEach((padState, index) => {
-        uiControls.setPadActive(index, padState.status === 'occupied');
-      });
-    }
-
-    applyHandControl(handPoint);
+    applyFingerInteraction(handPoint);
+    uiControls.setWaveform(buildWaveform(now));
     renderDebug(handPoint);
     renderHandPreview(handState);
   } else {
@@ -1693,13 +1562,6 @@ const mountCalibrationUi = () => {
     });
   });
   ui.previewModeButton.addEventListener('click', cyclePreviewMode);
-  ui.baselineButton.addEventListener('click', () => {
-    captureBaseline().catch((error) => {
-      console.error(error);
-      setStatus('采集空场失败');
-      updateUiState();
-    });
-  });
   ui.resetButton.addEventListener('click', resetCalibration);
   ui.debugButton.addEventListener('click', () => {
     state.debugVisible = !state.debugVisible;
@@ -1765,7 +1627,6 @@ window.synthRuntime = {
   debugOverlay,
   strudelRuntime,
   router,
-  captureBaseline,
   resetCalibration,
   enterLayoutMode,
   exitLayoutMode,
