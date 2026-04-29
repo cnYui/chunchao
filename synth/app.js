@@ -46,6 +46,33 @@ const cameraMonitorPanel = document.querySelector('#camera-monitor-panel');
 const cameraPreview = document.querySelector('#synth-camera-preview');
 const debugCanvas = document.querySelector('#synth-debug-canvas');
 const calibrationLayer = document.querySelector('#synth-calibration-layer');
+const handPreviewPanel = document.querySelector('#synth-hand-preview-panel');
+const handPreviewVideo = document.querySelector('#synth-hand-preview-video');
+const handPreviewOverlay = document.querySelector('#synth-hand-preview-overlay');
+const handPreviewContext = handPreviewOverlay?.getContext('2d');
+
+const handConnections = [
+  [0, 1], [1, 2], [2, 3], [3, 4],
+  [0, 5], [5, 6], [6, 7], [7, 8],
+  [5, 9], [9, 10], [10, 11], [11, 12],
+  [9, 13], [13, 14], [14, 15], [15, 16],
+  [13, 17], [17, 18], [18, 19], [19, 20],
+  [0, 17],
+];
+const handColors = {
+  Left: {
+    stroke: 'rgba(255, 182, 120, 0.9)',
+    fill: 'rgba(255, 236, 213, 0.96)',
+  },
+  Right: {
+    stroke: 'rgba(118, 220, 255, 0.92)',
+    fill: 'rgba(221, 247, 255, 0.98)',
+  },
+  Unknown: {
+    stroke: 'rgba(255, 246, 230, 0.88)',
+    fill: 'rgba(255, 255, 255, 0.98)',
+  },
+};
 
 const strudelRuntime = createBrowserStrudelRuntime();
 const strudelAdapter = {
@@ -776,6 +803,33 @@ const stylePreviewElements = () => {
     pointerEvents: 'none',
   });
 
+  if (handPreviewPanel) {
+    Object.assign(handPreviewPanel.style, {
+      display: state.cameraReady ? 'block' : 'none',
+      opacity: state.cameraReady ? '1' : '0',
+    });
+  }
+
+  if (handPreviewVideo) {
+    Object.assign(handPreviewVideo.style, {
+      position: 'absolute',
+      inset: '0',
+      width: '100%',
+      height: '100%',
+      objectFit: 'cover',
+    });
+  }
+
+  if (handPreviewOverlay) {
+    Object.assign(handPreviewOverlay.style, {
+      position: 'absolute',
+      inset: '0',
+      width: '100%',
+      height: '100%',
+      pointerEvents: 'none',
+    });
+  }
+
   if (ui.layoutSurface) {
     Object.assign(ui.layoutSurface.style, {
       position: 'absolute',
@@ -976,6 +1030,8 @@ const captureBaseline = async () => {
     return;
   }
 
+  state.baselineReady = false;
+  clearOccupancyRuntime();
   setStatus('正在采集空场 baseline');
   const frames = [];
 
@@ -984,7 +1040,6 @@ const captureBaseline = async () => {
     frames.push(samplePadFeatures(cameraPreview, activeGeometry.padRois, null));
   }
 
-  occupancyDetector.reset();
   occupancyDetector.setBaseline(averageFeatures(frames));
   state.baselineReady = true;
   setStatus('运行中');
@@ -1163,6 +1218,108 @@ const renderDebug = (handPoint = null) => {
   });
 };
 
+const resizeHandPreviewCanvas = () => {
+  if (!handPreviewOverlay) {
+    return { width: 0, height: 0 };
+  }
+
+  const width = Math.max(1, Math.round(handPreviewOverlay.clientWidth));
+  const height = Math.max(1, Math.round(handPreviewOverlay.clientHeight));
+
+  if (handPreviewOverlay.width !== width || handPreviewOverlay.height !== height) {
+    handPreviewOverlay.width = width;
+    handPreviewOverlay.height = height;
+  }
+
+  return { width, height };
+};
+
+const clearHandPreview = () => {
+  if (!handPreviewContext || !handPreviewPanel) {
+    return;
+  }
+
+  const { width, height } = resizeHandPreviewCanvas();
+  handPreviewContext.clearRect(0, 0, width, height);
+  handPreviewPanel.style.borderColor = 'rgba(247, 215, 195, 0.29)';
+  handPreviewPanel.style.boxShadow = '0 18px 48px rgba(0, 0, 0, 0.34)';
+};
+
+const drawHandConnection = (context, landmarks, fromIndex, toIndex, color, width, height) => {
+  const from = landmarks[fromIndex];
+  const to = landmarks[toIndex];
+  if (!from || !to) {
+    return;
+  }
+
+  context.beginPath();
+  context.moveTo(from.x * width, from.y * height);
+  context.lineTo(to.x * width, to.y * height);
+  context.strokeStyle = color.stroke;
+  context.lineWidth = 2.2;
+  context.lineCap = 'round';
+  context.lineJoin = 'round';
+  context.stroke();
+};
+
+const drawHandPoints = (context, landmarks, color, width, height) => {
+  landmarks.forEach((landmark) => {
+    context.beginPath();
+    context.arc(landmark.x * width, landmark.y * height, 3.2, 0, Math.PI * 2);
+    context.fillStyle = color.fill;
+    context.fill();
+  });
+};
+
+const toPreviewHands = (handState) => {
+  if (handState?.hands?.length) {
+    return handState.hands
+      .map((hand) => ({
+        handedness: hand.handedness,
+        landmarks: hand.normalizedPoints ?? [],
+      }))
+      .filter((hand) => hand.landmarks.length);
+  }
+
+  const fallbackLandmarks = handState?.normalizedPoints ?? [];
+  if (!fallbackLandmarks.length) {
+    return [];
+  }
+
+  return [{
+    handedness: handState.handedness ?? 'Unknown',
+    landmarks: fallbackLandmarks,
+  }];
+};
+
+const renderHandPreview = (handState) => {
+  if (!handPreviewContext) {
+    return;
+  }
+
+  const { width, height } = resizeHandPreviewCanvas();
+  handPreviewContext.clearRect(0, 0, width, height);
+
+  const previewHands = toPreviewHands(handState);
+  if (!previewHands.length) {
+    clearHandPreview();
+    return;
+  }
+
+  previewHands.forEach(({ handedness, landmarks }) => {
+    const color = handColors[handedness] ?? handColors.Unknown;
+    handConnections.forEach(([fromIndex, toIndex]) => {
+      drawHandConnection(handPreviewContext, landmarks, fromIndex, toIndex, color, width, height);
+    });
+    drawHandPoints(handPreviewContext, landmarks, color, width, height);
+  });
+
+  if (handPreviewPanel) {
+    handPreviewPanel.style.borderColor = 'rgba(255, 246, 230, 0.62)';
+    handPreviewPanel.style.boxShadow = '0 22px 56px rgba(0, 0, 0, 0.38), 0 0 28px rgba(255, 240, 220, 0.18)';
+  }
+};
+
 const wirePadFallback = () => {
   uiControls.getPadElements().forEach((pad, index) => {
     const patternKey = getGridCellPatternKey(index);
@@ -1274,7 +1431,11 @@ const startCamera = async () => {
   }
 
   setStatus('正在启动摄像头');
-  await cameraController.start();
+  const stream = await cameraController.start();
+  if (handPreviewVideo) {
+    handPreviewVideo.srcObject = stream;
+    await handPreviewVideo.play().catch(() => undefined);
+  }
   await handController.start();
   state.cameraReady = true;
   state.handReady = true;
@@ -1314,6 +1475,9 @@ const loop = (now) => {
 
     applyHandControl(handPoint);
     renderDebug(handPoint);
+    renderHandPreview(handState);
+  } else {
+    clearHandPreview();
   }
 
   requestAnimationFrame(loop);

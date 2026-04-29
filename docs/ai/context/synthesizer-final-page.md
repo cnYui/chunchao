@@ -22,10 +22,12 @@
 - 当前摄像头调试监视器已改为全屏固定覆盖层，直接压在电子合成器页面之上
 - 当前全屏摄像头覆盖层默认保持半透明，原因是用户需要一边看摄像头中的真实投影，一边看下方 HTML 合成器做对位
 - 当前手势识别已从 ROI baseline 中解耦：摄像头和 MediaPipe 启动后每帧都会检测手部，四点标定完成后即可用手控制 `VIBE / VOL / REV / POS`
+- 当前最终合成器页右下角已新增独立手部关节预览小窗，复用主摄像头流并叠加骨架描边，原因是需要与前两个交互场景保持一致的现场识别确认方式
 - 当前 ROI 差分只负责 16 格占用判断，仍然需要完成空场 baseline 后才会启动
 - 当前 ROI 占格评分已改为可配置加权分数：亮度差、方差差、边缘密度差分开计权，不再直接把不同量纲生硬相加
 - 当前 ROI 检测在 baseline 缺失或 ROI 有效像素过少时会直接跳过判定，避免未准备完成时误触发
 - 当前 ROI 检测结果会附带 `reason`，用于区分 `baseline-missing`、`sample-too-small`、`hand-overlap`
+- 当前重新采集空场 baseline 前必须先停掉旧 pad 声音并把 `baselineReady` 临时拉回 `false`，原因是否则旧的 occupied 声部会滞留，表现为空场下仍持续发声
 - 当前手部主控制点优先使用食指指尖，若缺失则回退到拇指或第一个关键点
 - 当前多手识别会按 MediaPipe handedness 置信度选择主手，并过滤低置信度结果
 - 当前最终合成器页已改为“自动触发图”主流程：直接读取真实 HTML 控件位置，自动生成控制台外框、16 个 pad、`VIBE / VOL / REV / POS` 的覆盖框
@@ -68,7 +70,11 @@
   - 页面主脚本已切到 Strudel grid 映射
 - 新增 `scripts/synth/roi-sampling.test.mjs`
 - 新增 `scripts/synth/ui-controls.test.mjs`
+- 新增 `scripts/synth/hand-preview-ui.test.mjs`
+- 新增 `scripts/synth/baseline-capture-flow.test.mjs`
 - 两个测试分别检查四边形 ROI 不统计包围盒角落像素、pad 激活态不修改按钮 `transform`
+- 手部预览测试检查第三页页面已挂载 `synth-hand-preview-panel / video / overlay`，并且 `synth/app.js` 已接入 `renderHandPreview`
+- baseline 流程测试检查重新采集空场前会先 `clearOccupancyRuntime()`，并把 `baselineReady` 置回 `false`
 - 新增 `scripts/strudel-runtime-state.test.mjs`
 - 该测试检查：
   - 旋钮四档映射为 `warm / bright / cold / dark`
